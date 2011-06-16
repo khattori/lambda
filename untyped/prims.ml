@@ -2,59 +2,70 @@
 open Absyn
 open Const
 
+let tm_error msg = TmApp(TmCon(CSym "error"),TmCon(CStr msg))
+let tm_error_wrong_argument_type s =
+  tm_error (s ^ ": wrong argument type")
+let tm_error_divided_by_zero s =
+  tm_error (s ^ ": divided by zero")
+
+let error_ store cs = match cs with
+  | [TmCon(CStr msg)] -> failwith msg
+  | [v] -> tm_error_wrong_argument_type "error_"
+  | _ -> assert false
+
 let hd_ store cs = match cs with
   | [TmApp(TmApp(TmCon(CSym "::"),v),_)] -> v
-  | _ -> failwith "hd_"
+  | _ -> tm_error_wrong_argument_type "hd_"
 let tl_ store cs = match cs with
   | [TmApp(TmApp(TmCon(CSym "::"),_),v)] -> v
-  | _ -> failwith "tl_"
+  | _ -> tm_error_wrong_argument_type "tl_"
 
+(* ®”‰‰ŽZ *)
 let iadd_ store cs = match cs with
   | [TmCon(CInt n); TmCon(CInt m)] -> TmCon(CInt(n + m))
-  | _ -> failwith "iadd_"
+  | _ -> tm_error_wrong_argument_type "iadd_"
 let isub_ store cs = match cs with
   | [TmCon(CInt n); TmCon(CInt m)] -> TmCon(CInt(n - m))
-  | _ -> failwith "isub_"
+  | _ -> tm_error_wrong_argument_type "isub_"
 let imul_ store cs = match cs with
   | [TmCon(CInt n); TmCon(CInt m)] -> TmCon(CInt(n * m))
-  | _ -> failwith "imul_"
+  | _ -> tm_error_wrong_argument_type "imul_"
 let idiv_ store cs = match cs with
-  | [TmCon(CInt n); TmCon(CInt m)] -> TmCon(CInt(n / m))
-  | _ -> failwith "idiv_"
+  | [TmCon(CInt n); TmCon(CInt m)] ->
+      (try TmCon(CInt(n / m)) with _ -> tm_error_divided_by_zero "idiv_")
+  | _ -> tm_error_wrong_argument_type "idiv_"
 let imod_ store cs = match cs with
-  | [TmCon(CInt n); TmCon(CInt m)] -> TmCon(CInt(n mod m))
-  | _ -> failwith "imod_"
+  | [TmCon(CInt n); TmCon(CInt m)] ->
+      (try TmCon(CInt(n mod m)) with _ -> tm_error_divided_by_zero "imod_")
+  | _ -> tm_error_wrong_argument_type "imod_"
 let igt_  store cs = match cs with
   | [TmCon(CInt n); TmCon(CInt m); v1; v2] ->
       if n > m then v1 else v2
-  | _ -> failwith "igt_"
+  | _ -> tm_error_wrong_argument_type "igt_"
 
+(* Ši”[ˆæ‘€ì *)
 let ref_ store cs = match cs with
   | [v] ->
       let m = Store.extend store v in TmCon(CMem m)
-  | _ -> failwith "ref_"
-
+  | _ -> assert false
 let drf_ store cs = match cs with
   | [TmCon(CMem m)] -> Store.lookup store m
-  | _ -> failwith "drf_"
-
+  | _ -> tm_error_wrong_argument_type "drf_"
 let asn_ store cs = match cs with
-  | [TmCon(CMem m);tm] ->
-      Store.update store m tm;
-      TmCon(CSym "unit")
-  | _ -> failwith "asn_"
-
+  | [TmCon(CMem m);tm] -> Store.update store m tm; TmCon(CSym "unit")
+  | _ -> tm_error_wrong_argument_type "asn_"
+(* “™‰¿”äŠr *)
 let beq_ store cs = match cs with
   | [c1; c2; v1; v2] when is_cstr_value c1 && is_cstr_value c2 && c1 = c2 -> v1
   | [x; y; v1; v2] -> v2
-  | _ -> failwith "beq_"
+  | _ -> assert false
 
 (*
  * fix v => v (fix v)
  *)
 let fix_ store cs = match cs with
   | [v] -> TmApp(v,(TmApp(TmCon(CSym "fix"),v)))
-  | _ -> failwith "fix_"
+  | _ -> assert false
 
 (*
  * case (inl v) v1 v2 => v1 v
@@ -63,14 +74,14 @@ let fix_ store cs = match cs with
 let case_ store cs = match cs with
   | [TmApp(TmCon(CSym "inl"), v); v1; v2] -> TmApp(v1,v)
   | [TmApp(TmCon(CSym "inr"), v); v1; v2] -> TmApp(v2,v)
-  | _ -> failwith "case_"
+  | _ -> tm_error_wrong_argument_type "case_"
 
 (* 
  * exit => I—¹
  *)
 let exit_ store cs = match cs with
   | [] -> exit 0
-  | _ -> failwith "exit_"
+  | _ -> assert false
 
 (** ƒvƒŠƒ~ƒeƒBƒu‚Ì’è‹` *)
 
@@ -97,6 +108,7 @@ let dstr_table = [
   ( "beq",   (4, beq_)   );
   ( "fix",   (1, fix_)   );
   ( "exit",  (0, exit_)  );
+  ( "error", (1, error_) );
 ]
 
 let dstr_apply d store vs =
@@ -104,10 +116,7 @@ let dstr_apply d store vs =
     if arity == List.length vs then
       f store vs
     else
-      failwith "dstr_apply: argno mismatch"
-
-let symbols =
-  (List.map fst cstr_table) @ (List.map fst dstr_table)
+      assert false
 
 let _ =
   Const.table_ref :=
@@ -123,20 +132,22 @@ def not   = \t.== t false;
 def andalso = \t1.\(t2).if t1 t2 false;
 def orelse  = \t1.\(t2).if t1 true t2;
 def !=    = \t1.\t2.beq t1 t2 false true;
-def >     = \t1.\t2.gt t1 t2 true false;
+def >     = \t1.\t2.igt_ t1 t2 true false;
 def >=    = \t1.\t2.orelse (> t1 t2) (== t1 t2);
-def <     = \t1.\t2.gt t2 t1 true false;
+def <     = \t1.\t2.igt_ t2 t1 true false;
 def <=    = \t1.\t2.orelse (< t1 t2) (== t1 t2);
 def min   = \t1.\t2.if (<= t1 t2) t1 t2;
 def max   = \t1.\t2.if (>= t1 t2) t1 t2;
 
 def evenodd =
-        fix (\(eo).:: (\n.if (== n 0) true (tl eo (- n 1)))
-                           (\n.if (== n 0) false (hd eo (- n 1))));
+        fix (\(eo).:: (\n.if (== n 0) true (tl eo (isub_ n 1)))
+                           (\n.if (== n 0) false (hd eo (isub_ n 1))));
 def even = hd evenodd
 and odd  = tl evenodd;
 
-def fact  = fix (\(fact).\n.if (== n 0) 1 ( * n (fact (- n 1))));
+def fact  = fix (\(fact).\n.if (== n 0) 1 ( imul_ n (fact (isub_ n 1))));
+
+def foo  = fix (\(foo).\n.if (== n 0) error (foo (isub_ n 1)));
 
 def Sum1 = \x.(inl x);
 def Sum2 = \x.(inr (inl x));

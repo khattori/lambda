@@ -12,7 +12,7 @@ let delta_reduc store tm =
   let rec flatten tm args = match tm with
     | TmCon(CSym d)  -> d,args
     | TmApp(tm1,tm2) -> flatten tm1 (tm2::args)
-    | _ -> failwith "delta_reduc:flatten"
+    | _ -> assert false
   in
   let d,args = flatten tm [] in
     Prims.dstr_apply d store args
@@ -50,7 +50,7 @@ let rec eval_step ctx store tm =
     | TmVar x ->
         let tm',o = Context.get_term ctx x in
           term_shift (x + o) tm'
-    | _ -> failwith "stuck"
+    | _ -> Prims.tm_error "*** no eval rule ***"
 (*
   let x,y,z = 2,3,4
   let x1 = E1 and x2 = E2 and ... xn = En

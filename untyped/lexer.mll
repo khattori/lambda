@@ -14,6 +14,9 @@
     ( "let",   LET   );
     ( "def",   DEF   );
     ( "and",   AND   );
+    ( "data",  DATA  );
+    ( "case",  CASE  );
+    ( "of",    OF    );
   ]
 
 }
@@ -31,7 +34,7 @@ let digit = '0' | nonzero_digit
 let hexdg = ['0'-'9' 'a'-'f' 'A'-'F']
 let octdg = ['0'-'7']
 let num = nonzero_digit digit* | '0'
-let float_literal = digit* '.' digit* (['e' 'E'] sign? digit+)*
+let float_literal = digit+ '.' digit+ (['e' 'E'] sign? digit+)*
 
 let ident_char_head = alpha | '_'
 let ident_char  = ident_char_head | digit | ['\'' '?' '!']
@@ -48,29 +51,32 @@ rule token = parse
         let s = lexeme lexbuf in
           if List.mem_assoc s keyword_table then
             List.assoc s keyword_table
-          else if List.mem s Prims.symbols then
+          else if Const.is_symbol s then
             CONST(Const.CSym s)
           else
             IDENT s
       }
+  | "..." { DDDOT }
   | "=" { EQ }
   | "::=" { COLONCOLONEQ }
+  | "->" { RARROW }
   | operator_char+
       {
         let s = lexeme lexbuf in
-          if List.mem s Prims.symbols then
+          if Const.is_symbol s then
             CONST(Const.CSym s)
           else
             IDENT s
       }
   | num { CONST(Const.CInt(int_of_string(lexeme lexbuf))) }
-  | float_literal
-      { CONST(Const.CReal(float_of_string(lexeme lexbuf))) }
   | "\\" { BACKSLASH }
   (* セパレータ *)
   | "(" { LPAREN }
   | ")" { RPAREN }
   | "." { DOT }
+  | "|" { VBAR }
+  | float_literal
+      { CONST(Const.CReal(float_of_string(lexeme lexbuf))) }
   | ";" { SEMI }
   | '"'
       { CONST(Const.CStr(string (Buffer.create 0) lexbuf)) }

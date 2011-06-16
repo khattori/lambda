@@ -44,6 +44,10 @@ let repl parse tokenize =
                 print ctx v;
                 ctx
           | Defn binds -> def_binds ctx binds
+          | Data(c,arity) ->
+              Const.add_cstr c arity;
+              Printf.printf "data %s(%d)" c arity;
+              ctx
           | Noop -> ctx
       )
       in

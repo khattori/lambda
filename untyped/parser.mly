@@ -11,7 +11,13 @@
 %token LET
 %token DEF
 %token AND
+%token DATA
+%token CASE
+%token OF
+%token RARROW
+%token DDDOT
 %token DOT
+%token VBAR
 %token SEMI
 %token BACKSLASH
 %token LPAREN
@@ -42,6 +48,15 @@ command
         let _ = Context.add_names ctx names in
           Defn binds
       }
+  | DATA IDENT
+      { fun ctx -> Data($2,0) }
+  | DATA IDENT LPAREN CONST RPAREN
+      { fun ctx ->
+          match $4 with
+              Const.CInt(n) -> Data($2,n)
+            | _ -> raise Absyn.Parse_error
+      }
+
   | /* empty */
       { fun ctx -> Noop }
 ;
@@ -72,6 +87,23 @@ expression
   | BACKSLASH LPAREN IDENT RPAREN DOT expression {
       fun ctx -> TmAbs(Lazy, $3, $6 (Context.add_name ctx $3))
     }
+  | CASE expression OF pattern_list {
+      fun ctx -> let patns,default = $4 ctx in TmCas($2 ctx,patns,default)
+    }
+;
+
+pattern_list
+  : pattern { fun ctx -> [$1 ctx],None }
+  | pattern VBAR pattern_list {
+      fun ctx -> let patns,default = $3 ctx in ($1 ctx::patns),default
+    }
+  | DDDOT RARROW atomic_expression {
+      fun ctx -> [],Some($3 ctx)
+    }
+;
+
+pattern
+  : CONST RARROW atomic_expression { fun ctx -> $1,$3 ctx }
 ;
 
 apply_expression

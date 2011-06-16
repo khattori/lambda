@@ -21,43 +21,54 @@ type term =
   | TmAbs of strategy * string * term
   | TmApp of term * term
   | TmLet of bind list * term
+  | TmCas of term * case list * term option
 and bind = strategy * string * term
+and case = Const.t * term
 and command =
   | Defn of bind list
   | Eval of term
+  | Data of string * int
   | Noop
+
+let rec to_string ctx tm =
+  match tm with
+    | TmVar x -> Context.index2name ctx x
+    | TmCon c -> Const.to_string c
+    | TmAbs(Eager,x,tm) ->
+        let ctx',x' = Context.fresh_name ctx x in
+          sprintf "(\\%s" x' ^ "." ^ to_string ctx' tm ^ ")"
+    | TmAbs(Lazy,x,tm) ->
+        let ctx',x' = Context.fresh_name ctx x in
+          sprintf "(\\(%s)" x' ^ "." ^ to_string ctx' tm ^ ")"
+    | TmApp(tm1,tm2) ->
+        "(" ^ to_string ctx tm1 ^ " " ^ to_string ctx tm2 ^ ")"
+    | TmLet(binds,tm2) ->
+        "(let " ^
+          let ctx',s = List.fold_left (to_string_bind ctx) (ctx,"") binds
+          in
+            s ^ "in " ^ to_string ctx' tm2 ^ ")"
+    | TmCas(tm1,cases,def) ->
+        "(case " ^ to_string ctx tm1 ^ " of " ^
+          List.fold_left (to_string_case ctx) "" cases ^
+          ( match def with
+              | None -> ""
+              | Some tm2 -> sprintf "| ... -> %s" (to_string ctx tm2) ) ^
+          ")"
+and to_string_case ctx str (c,tm) =
+  str ^ (sprintf "| %s -> %s" (Const.to_string c) (to_string ctx tm))
+and to_string_bind ctx (ctx',str) (s,x,tm) =
+  let ctx'', x' = Context.fresh_name ctx' x in
+    ctx'', str ^ (
+      match s with
+        | Eager -> sprintf "%s = " x'
+        | Lazy  -> sprintf "%s ::= " x'
+    ) ^ to_string ctx tm ^ "; "
 
 (*
  * print: ’ŠÛ\•¶–Ø‚Ìo—Í
- * 
  *)
 let rec print ctx tm =
-  match tm with
-    | TmVar x -> print_string (Context.index2name ctx x)
-    | TmCon c -> Const.print c
-    | TmAbs(Eager,x,tm) ->
-        let ctx',x' = Context.fresh_name ctx x in
-          printf "(\\%s" x'; printf "."; print ctx' tm; printf ")"
-    | TmAbs(Lazy,x,tm) ->
-        let ctx',x' = Context.fresh_name ctx x in
-          printf "(\\(%s)" x'; printf "."; print ctx' tm; printf ")"
-    | TmApp(tm1,tm2) ->
-        printf "("; print ctx tm1; printf " "; print ctx tm2; printf ")"
-    | TmLet(binds,tm2) ->
-        printf "(let ";
-        let ctx' = List.fold_left (print_bind ctx) ctx binds
-        in
-          printf " in ";
-          print ctx' tm2; printf ")"
-and print_bind ctx ctx' (s,x,tm) =
-  let ctx'', x' = Context.fresh_name ctx' x in
-    (
-      match s with
-        | Eager -> printf "%s = " x'
-        | Lazy  -> printf "%s ::= " x'
-    );
-    print ctx tm; printf ";"; ctx''
-
+  print_string (to_string ctx tm)
 
 (* De Bruijin index *)
 (*

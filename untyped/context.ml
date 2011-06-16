@@ -1,4 +1,5 @@
 exception Multiple_names of string
+exception Unbound_name of string
 
 type strategy = Eager | Lazy
 
@@ -11,13 +12,11 @@ type 'a t = (string * 'a binding) list
 let empty = []
 
 let index2name ctx x =
-  try 
-    Printf.sprintf "%s(%d)" (fst(List.nth ctx x)) x
-  with _ -> "unknown"
+  Printf.sprintf "%s(%d)" (fst(List.nth ctx x)) x
 
 let rec name2index ctx x =
   match ctx with
-    | [] -> failwith("unbound name: " ^ x)
+    | [] -> raise (Unbound_name x)
     | (y,_)::rest ->
         if y = x then 0 else 1 + (name2index rest x)
 
@@ -42,9 +41,8 @@ let rec fresh_name ctx x =
     ((x,NameBind)::ctx), x
 
 let get_term ctx x =
-  try
   match snd(List.nth ctx x) with
     | TermBind(tm,o) -> tm,o
-    | _ -> failwith "get_term"
-  with _ -> failwith (Printf.sprintf "get_term: %d" x)
+    | _ -> assert false
+
 

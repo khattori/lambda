@@ -7,18 +7,22 @@ type t =
   | CSym  of string
   | CMem  of int
 
-let print = function
-  | CInt i  -> printf "%d" i
-  | CReal d -> printf "%g" d
-  | CSym s  -> print_string s
-  | CStr s  -> printf "\"%s\"" s
-  | CMem m  -> printf "<%d>" m
+let to_string = function
+  | CInt i  -> sprintf "%d" i
+  | CReal d -> sprintf "%g" d
+  | CSym s  -> s
+  | CStr s  -> sprintf "\"%s\"" s
+  | CMem m  -> sprintf "<%d>" m
+let print c = print_string (to_string c)
 
 type kind =
   | Cstr of int
   | Dstr of int
 
 let table_ref: (string * kind) list ref = ref []
+let is_symbol s = List.mem_assoc s !table_ref
+let add_cstr c arity =
+  table_ref := (c,Cstr arity)::!table_ref
 
 let is_cstr c = match c with
   | CMem _ -> false

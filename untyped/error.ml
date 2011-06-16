@@ -12,7 +12,9 @@ let report e = (
     | Absyn.Parse_error ->
         fprintf stderr "Syntax error\n"
     | Context.Multiple_names s ->
-        fprintf stderr "Multiple name defined (%s)\n" s
+        fprintf stderr "Multiple names defined: %s\n" s
+    | Context.Unbound_name s ->
+        fprintf stderr "Unbound name: %s\n" s
     | Failure s ->
         fprintf stderr "Runtime error: %s\n" s
     | exn -> raise exn );
