@@ -9,25 +9,25 @@ let tl_ store cs = match cs with
   | [TmApp(TmApp(TmCon(CSym "::"),_),v)] -> v
   | _ -> failwith "tl_"
 
-let add_ store cs = match cs with
+let iadd_ store cs = match cs with
   | [TmCon(CInt n); TmCon(CInt m)] -> TmCon(CInt(n + m))
-  | _ -> failwith "add_"
-let sub_ store cs = match cs with
+  | _ -> failwith "iadd_"
+let isub_ store cs = match cs with
   | [TmCon(CInt n); TmCon(CInt m)] -> TmCon(CInt(n - m))
-  | _ -> failwith "sub_"
-let mul_ store cs = match cs with
+  | _ -> failwith "isub_"
+let imul_ store cs = match cs with
   | [TmCon(CInt n); TmCon(CInt m)] -> TmCon(CInt(n * m))
-  | _ -> failwith "mul_"
-let div_ store cs = match cs with
+  | _ -> failwith "imul_"
+let idiv_ store cs = match cs with
   | [TmCon(CInt n); TmCon(CInt m)] -> TmCon(CInt(n / m))
-  | _ -> failwith "div_"
-let mod_ store cs = match cs with
+  | _ -> failwith "idiv_"
+let imod_ store cs = match cs with
   | [TmCon(CInt n); TmCon(CInt m)] -> TmCon(CInt(n mod m))
-  | _ -> failwith "div_"
-let gt_  store cs = match cs with
+  | _ -> failwith "imod_"
+let igt_  store cs = match cs with
   | [TmCon(CInt n); TmCon(CInt m); v1; v2] ->
       if n > m then v1 else v2
-  | _ -> failwith "gt_"
+  | _ -> failwith "igt_"
 
 let ref_ store cs = match cs with
   | [v] ->
@@ -82,21 +82,21 @@ let cstr_table = [
 ]
 
 let dstr_table = [
-  ( "case", (3, case_) );
-  ( "hd",   (1, hd_)   );
-  ( "tl",   (1, tl_)   );
-  ( "+",    (2, add_)  );
-  ( "-",    (2, sub_)  );
-  ( "*",    (2, mul_)  );
-  ( "/",    (2, div_)  );
-  ( "%",    (2, mod_)  );
-  ( "gt",   (4, gt_)   );
-  ( "ref",  (1, ref_)  );
-  ( "!",    (1, drf_)  );
-  ( ":=",   (2, asn_)  );
-  ( "beq",  (4, beq_)  );
-  ( "fix",  (1, fix_)  );
-  ( "exit", (0, exit_) );
+  ( "case",  (3, case_)  );
+  ( "hd",    (1, hd_)    );
+  ( "tl",    (1, tl_)    );
+  ( "iadd_", (2, iadd_)  );
+  ( "isub_", (2, isub_)  );
+  ( "imul_", (2, imul_)  );
+  ( "idiv_", (2, idiv_)  );
+  ( "imod_", (2, imod_)  );
+  ( "igt_",  (4, igt_)   );
+  ( "ref",   (1, ref_)   );
+  ( "!",     (1, drf_)   );
+  ( ":=",    (2, asn_)   );
+  ( "beq",   (4, beq_)   );
+  ( "fix",   (1, fix_)   );
+  ( "exit",  (0, exit_)  );
 ]
 
 let dstr_apply d store vs =

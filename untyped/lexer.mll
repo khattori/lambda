@@ -15,6 +15,7 @@
     ( "def",   DEF   );
     ( "and",   AND   );
   ]
+
 }
 
 let space = [' ' '\t']
@@ -25,10 +26,12 @@ let newline = cr | lf | cr lf
 
 let alpha = ['a'-'z' 'A'-'Z']
 let nonzero_digit = ['1'-'9']
+let sign  = ['+' '-']
 let digit = '0' | nonzero_digit
 let hexdg = ['0'-'9' 'a'-'f' 'A'-'F']
 let octdg = ['0'-'7']
 let num = nonzero_digit digit* | '0'
+let float_literal = digit* '.' digit* (['e' 'E'] sign? digit+)*
 
 let ident_char_head = alpha | '_'
 let ident_char  = ident_char_head | digit | ['\'' '?' '!']
@@ -61,6 +64,8 @@ rule token = parse
             IDENT s
       }
   | num { CONST(Const.CInt(int_of_string(lexeme lexbuf))) }
+  | float_literal
+      { CONST(Const.CReal(float_of_string(lexeme lexbuf))) }
   | "\\" { BACKSLASH }
   (* セパレータ *)
   | "(" { LPAREN }
