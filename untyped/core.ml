@@ -5,16 +5,28 @@ open Const
 open Context
 
 (*
+ * (...((C t1) t2) ... tn)‚ð
+ *    C,[t1;t2;...;tn]‚ÌŒ`‚É‚·‚é
+ *)
+let flatten tm =
+  let rec iter tm args = match tm with
+    | TmCon c -> c,args
+    | TmApp(tm1,tm2) -> iter tm1 (tm2::args)
+    | _ -> assert false
+  in
+    iter tm []
+(* flatten‚Æ‹t *)
+let rec apply tm tms =
+  match tms with
+    | [] -> tm
+    | tm'::tms' -> apply (TmApp(tm,tm')) tms'
+
+(*
  * delta_reduc: ƒÂŠÈ–ñ
  *
  *)
 let delta_reduc store tm =
-  let rec flatten tm args = match tm with
-    | TmCon(CSym d)  -> d,args
-    | TmApp(tm1,tm2) -> flatten tm1 (tm2::args)
-    | _ -> assert false
-  in
-  let d,args = flatten tm [] in
+  let d,args = flatten tm in
     Prims.dstr_apply d store args
 
 (*
@@ -50,7 +62,22 @@ let rec eval_step ctx store tm =
     | TmVar x ->
         let tm',o = Context.get_term ctx x in
           term_shift (x + o) tm'
-    | _ -> Prims.tm_error "*** no eval rule ***"
+    | TmCas(tm1,cs,tm2opt) when is_cstr_value tm1 ->
+        let c,vs = flatten tm1 in (
+            try
+              let tm' = List.assoc c cs in
+                apply tm' vs
+            with
+                Not_found -> (
+                  match tm2opt with
+                    | Some tm' -> TmApp(tm',tm1)
+                    | None -> Prims.tm_error "*** no match case ***"
+                )
+          )
+    | TmCas(tm1,cs,tm2opt) ->
+        TmCas(eval_step ctx store tm1,cs,tm2opt)
+    | _ ->
+        Prims.tm_error "*** no eval rule ***"
 (*
   let x,y,z = 2,3,4
   let x1 = E1 and x2 = E2 and ... xn = En

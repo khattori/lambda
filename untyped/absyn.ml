@@ -83,7 +83,13 @@ let term_map onvar t =
     | TmLet(binds,t2) ->
         TmLet(List.map (fun (s,x,t1) -> s,x,walk c t1) binds,
               walk (c + (List.length binds)) t2)
+    | TmCas(t1,cs,t2opt) ->
+        TmCas(walk c t1,
+              List.map (fun (con,t) -> con,walk c t) cs,
+              walk_opt c t2opt)
     | con             -> con
+  and walk_opt c topt = match topt with
+    | None -> None | Some t -> Some(walk c t)
   in
     walk 0 t
 

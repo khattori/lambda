@@ -60,6 +60,7 @@ rule token = parse
   | "=" { EQ }
   | "::=" { COLONCOLONEQ }
   | "->" { RARROW }
+  | "|" { VBAR }
   | operator_char+
       {
         let s = lexeme lexbuf in
@@ -74,7 +75,6 @@ rule token = parse
   | "(" { LPAREN }
   | ")" { RPAREN }
   | "." { DOT }
-  | "|" { VBAR }
   | float_literal
       { CONST(Const.CReal(float_of_string(lexeme lexbuf))) }
   | ";" { SEMI }

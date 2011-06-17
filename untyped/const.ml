@@ -19,6 +19,10 @@ type kind =
   | Cstr of int
   | Dstr of int
 
+let get_symbol c = match c with
+  | CSym s -> s
+  | _ -> assert false
+
 let table_ref: (string * kind) list ref = ref []
 let is_symbol s = List.mem_assoc s !table_ref
 let add_cstr c arity =
