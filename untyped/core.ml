@@ -35,8 +35,8 @@ let delta_reduc store tm =
   E ::= []
       | E t
       | v E
-      | let z1 = v1 and z2 = v2 and ... and zi = Ei and ... zn = En in t
-
+      | let zn = v1 and z2 = v2 and ... and zi = Ei and ... zn = En in t
+let x,y,... = 1,2,3
   (\z.t) v ¨ [z/v]t
   (\(z).t') t ¨ [z/t']t
   let z ::= t1 in t2 ¨ [z/t1]t2
@@ -51,11 +51,13 @@ let rec eval_step ctx store tm =
         term_subst_top tm1 tm2         (* ƒÀ-reduc *)
     | tm when is_dstr_value tm ->
         delta_reduc store tm      (* ƒÂ-reduc *)
+    | TmApp(tm1,tm2) when is_cstr_value tm1 ->
+        Prims.tm_error "*** invalid apply ***"
     | TmApp(tm1,tm2) when is_value tm1 ->
-        let tm2' = eval_step ctx store tm2 in
+        let tm2' = eval ctx store tm2 in
           TmApp(tm1, tm2')
     | TmApp(tm1,tm2) ->
-        let tm1' = eval_step ctx store tm1 in
+        let tm1' = eval ctx store tm1 in
           TmApp(tm1', tm2)
     | TmLet(binds,tm2) ->
         trans_binds binds tm2
@@ -75,7 +77,11 @@ let rec eval_step ctx store tm =
                 )
           )
     | TmCas(tm1,cs,tm2opt) ->
-        TmCas(eval_step ctx store tm1,cs,tm2opt)
+        TmCas(eval ctx store tm1,cs,tm2opt)
+    | TmTpl tms ->
+        TmTpl(List.map
+                (fun tm -> if is_value tm then tm else eval ctx store tm)
+                tms)
     | _ ->
         Prims.tm_error "*** no eval rule ***"
 (*
@@ -91,7 +97,7 @@ and trans_binds binds tm =
     (List.fold_right (fun (s,x,_) tm -> TmAbs(s,x,tm)) binds tm)
     binds
 
-let eval ctx store tm =
+and eval ctx store tm =
   let rec iter tm =
     if is_value tm then tm else iter (eval_step ctx store tm)
   in

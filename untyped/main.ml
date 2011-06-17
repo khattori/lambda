@@ -7,8 +7,9 @@ let print_prompt() =
   flush stdout
 
 let print_bind ctx x s tm =
+  print_string(bind_type_to_string s);
   print_string x;
-  print_string (match s with Eager -> " = " | Lazy -> " ::= ");
+  print_string "="
   print ctx tm;
   print_newline()
 

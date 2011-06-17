@@ -10,22 +10,34 @@
 %token IN
 %token LET
 %token DEF
-%token AND
 %token DATA
 %token CASE
 %token OF
 %token RARROW
 %token DDDOT
 %token DOT
+%token COMMA
 %token VBAR
 %token SEMI
 %token BACKSLASH
 %token LPAREN
 %token RPAREN
 %token EQ
-%token COLONCOLONEQ
+%token WILDCARD
 %token <string>  IDENT
 %token <Const.t> CONST
+%token <int>     ARITY
+
+%nonassoc IN
+%nonassoc LET
+%nonassoc OF
+%nonassoc below_VBAR
+%left     VBAR
+%nonassoc below_COMMA
+%left     COMMA
+%right    RARROW
+%nonassoc DOT
+
 
 %start toplevel
 %type <Absyn.term Context.t -> Absyn.command> toplevel
@@ -34,91 +46,75 @@
 /* トップレベル */
 toplevel
   : command SEMI { $1 }
-  | error SEMI { raise Absyn.Parse_error }
-  | EOF { raise End_of_file }
+  | error SEMI   { raise Absyn.Parse_error }
+  | EOF          { raise End_of_file }
 ;
-
 command
-  : expression
-      { fun ctx -> Eval($1 ctx) }
-  | DEF bind_list {
+  : expression                     { fun ctx -> Eval($1 ctx) }
+  | DEF binder_list EQ expression  { fun ctx -> Defn($2 ctx,$4 ctx) }
+  | DATA IDENT arity_option        { fun ctx -> Data($2,$3) }
+  | /* empty */                    { fun ctx -> Noop }
+;
+arity_option
+  : /* empty */  { 0 }
+  | ARITY        { $1 }
+;
+binder_list
+  : binder_comma_list {
       fun ctx ->
-        let binds = $2 ctx in
-        let names = List.map (fun (_,x,_) -> x) binds in
-        let _ = Context.add_names ctx names in
-          Defn binds
-      }
-  | DATA IDENT
-      { fun ctx -> Data($2,0) }
-  | DATA IDENT LPAREN CONST RPAREN
-      { fun ctx ->
-          match $4 with
-              Const.CInt(n) -> Data($2,n)
-            | _ -> raise Absyn.Parse_error
-      }
-
-  | /* empty */
-      { fun ctx -> Noop }
+        let bs = List.rev ($1 ctx) in
+          bs, Context.add_names ctx bs
+    }
+;
+binder_comma_list
+  : binder                         { fun ctx -> [$1 ctx] }
+  | binder_comma_list COMMA binder { fun ctx -> $3 ctx::$1 ctx }
+;
+binder
+  : WILDCARD        { fun ctx -> Wild }
+  | IDENT           { fun ctx -> Eager $1 }
+  | BACKSLASH IDENT { fun ctx -> Lazy  $2 }
 ;
 
-bind_list
-  : bind { fun ctx -> [$1 ctx] }
-  | bind AND bind_list { fun ctx -> $1 ctx::$3 ctx }
+expression_comma_list
+  : expression COMMA expression            { fun ctx -> [$3 ctx; $1 ctx] }
+  | expression_comma_list COMMA expression { fun ctx -> $3 ctx::$1 ctx }
 ;
-
-bind
-  : IDENT EQ expression
-      { fun ctx -> (Eager, $1, $3 ctx) }
-  | IDENT COLONCOLONEQ expression
-      { fun ctx -> (Lazy, $1, $3 ctx) }
-;
-
 expression
   : apply_expression { $1 }
-  | LET bind_list IN expression {
+  | expression_comma_list %prec below_COMMA {
+      fun ctx -> TmTpl(List.rev($1 ctx))
+    }
+  | LET binder_list EQ expression IN expression {
       fun ctx ->
-        let binds = $2 ctx in
-        let names = List.map (fun (_,x,_) -> x) binds in
-          TmLet(binds, $4 (Context.add_names ctx names))
+        let bs,ctx' = $2 ctx in
+          TmLet(bs, $4 ctx, $6 ctx')
     }
-  | BACKSLASH IDENT DOT expression {
-      fun ctx -> TmAbs(Eager, $2, $4 (Context.add_name ctx $2))
+  | BACKSLASH binder_list DOT expression {
+      fun ctx ->
+        let bs,ctx' = $2 ctx in
+          TmAbs(bs, $4 ctx')
     }
-  | BACKSLASH LPAREN IDENT RPAREN DOT expression {
-      fun ctx -> TmAbs(Lazy, $3, $6 (Context.add_name ctx $3))
-    }
-  | CASE expression OF pattern_list {
-      fun ctx -> let patns,default = $4 ctx in TmCas($2 ctx,patns,default)
+  | CASE expression OF case_list {
+      fun ctx -> TmCas($2 ctx, $4 ctx)
     }
 ;
 
-pattern_list
-  : pattern { fun ctx -> [$1 ctx],None }
-  | pattern VBAR pattern_list {
-      fun ctx -> let patns,default = $3 ctx in ($1 ctx::patns),default
-    }
-  | DDDOT RARROW atomic_expression {
-      fun ctx -> [],Some($3 ctx)
-    }
+case_list
+  : pattern_case %prec below_VBAR { fun ctx -> [$1 ctx]       }
+  | default_case %prec below_VBAR { fun ctx -> [$1 ctx]       }
+  | pattern_case VBAR case_list   { fun ctx -> $1 ctx::$3 ctx }
 ;
-
-pattern
-  : CONST RARROW atomic_expression { fun ctx -> $1,$3 ctx }
-;
+pattern_case : CONST RARROW expression { fun ctx -> PatnCase($1,$3 ctx) };
+default_case : DDDOT RARROW expression { fun ctx -> DeflCase($3 ctx)    };
 
 apply_expression
-  : atomic_expression { $1 }
-  | apply_expression atomic_expression {
-      fun ctx -> TmApp($1 ctx, $2 ctx)
-    }
+  : atomic_expression                  { $1 }
+  | apply_expression atomic_expression { fun ctx -> TmApp($1 ctx, $2 ctx) }
 ;
 
 atomic_expression
-  : IDENT {
-      fun ctx ->
-        let i = Context.name2index ctx $1 in
-          TmVar i
-    }
-  | CONST { fun ctx -> TmCon($1) }
+  : IDENT                    { fun ctx -> TmVar(Context.name2index ctx $1) }
+  | CONST                    { fun ctx -> TmCon $1 }
   | LPAREN expression RPAREN { $2 }
 ;

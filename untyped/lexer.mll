@@ -13,7 +13,6 @@
     ( "in",    IN    );
     ( "let",   LET   );
     ( "def",   DEF   );
-    ( "and",   AND   );
     ( "data",  DATA  );
     ( "case",  CASE  );
     ( "of",    OF    );
@@ -46,6 +45,9 @@ rule token = parse
       { token lexbuf }
   | newline
       { token lexbuf }
+  | "_"
+      { WILDCARD }
+  | "/" (num as n) { ARITY(int_of_string n) }
   | ident_char_head ident_char*
       {
         let s = lexeme lexbuf in
@@ -58,7 +60,6 @@ rule token = parse
       }
   | "..." { DDDOT }
   | "=" { EQ }
-  | "::=" { COLONCOLONEQ }
   | "->" { RARROW }
   | "|" { VBAR }
   | operator_char+
@@ -75,6 +76,7 @@ rule token = parse
   | "(" { LPAREN }
   | ")" { RPAREN }
   | "." { DOT }
+  | "," { COMMA }
   | float_literal
       { CONST(Const.CReal(float_of_string(lexeme lexbuf))) }
   | ";" { SEMI }

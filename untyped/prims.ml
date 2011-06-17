@@ -78,7 +78,6 @@ let exit_ store cs = match cs with
 (** プリミティブの定義 *)
 
 let cstr_table = [
-  ( "unit",  0 );
   ( "::",    2 );
 ]
 

@@ -1,4 +1,5 @@
-RESULT = polytype.exe
+
+RESULT = untype.exe
 LIBS =
 SOURCES = \
 	store.ml \

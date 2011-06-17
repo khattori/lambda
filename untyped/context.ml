@@ -1,7 +1,10 @@
 exception Multiple_names of string
 exception Unbound_name of string
 
-type strategy = Eager | Lazy
+type binder =
+  | Wild
+  | Eager * string
+  | Lazy * string
 
 type 'a binding =
   | NameBind
