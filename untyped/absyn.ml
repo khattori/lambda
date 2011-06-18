@@ -1,10 +1,12 @@
 (**
    Absyn: 抽象構文木定義
 *)
+open ListAux
 open Printf
 open Context
 
 exception Parse_error
+exception Multiple_labels of string
 
 (* 項の定義 *)
 (*
@@ -210,4 +212,12 @@ let is_dstr_value tm =
 let is_cstr_value tm =
   check_value Const.is_cstr tm
 
-
+(*
+ * check_record: レコードに同一ラベル名が含まれているか判定
+ *)
+let check_record rcd =
+  let xs = List.filter_map (
+    fun (b,_) -> match b with Eager x | Lazy x -> Some x | Wild -> None
+  ) rcd in
+    List.check_dup (fun x -> raise (Multiple_labels x)) xs;
+    rcd

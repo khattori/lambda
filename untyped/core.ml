@@ -1,9 +1,7 @@
 (** lambda•]‰¿Ší *)
-
 open Absyn
 open Const
 open Context
-
 
 exception Return_term of term
 (*

@@ -123,7 +123,7 @@ atomic_expression
   | atomic_expression DOT IDENT { fun ctx -> TmLbl($1 ctx, $3) }
   | LPAREN expression RPAREN    { $2 }
   | LPAREN RPAREN               { fun ctx -> Prims.nil }
-  | LBRACE record RBRACE        { fun ctx -> TmRcd($2 ctx) }
+  | LBRACE record RBRACE        { fun ctx -> TmRcd(check_record($2 ctx)) }
   | LBRACE RBRACE               { fun ctx -> Prims.nil }
 ;
 record

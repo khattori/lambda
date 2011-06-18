@@ -2,6 +2,7 @@
 RESULT = untype.exe
 LIBS =
 SOURCES = \
+	listAux.ml \
 	store.ml \
 	const.ml \
 	context.ml \

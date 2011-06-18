@@ -1,3 +1,5 @@
+open ListAux
+
 exception Multiple_names of string
 exception Unbound_name of string
 
@@ -30,14 +32,10 @@ let add_bind ctx b = match b with
   | Eager x -> (x,  NameBind)::ctx
   | Lazy x  -> (x,  NameBind)::ctx
 let add_binds ctx bs =
-  let bs' = List.filter (function Eager s | Lazy s -> true | _ -> false) bs in
-  let xs = List.map (function Eager s | Lazy s -> s | _ -> assert false) bs' in
-  let xs = List.sort compare xs in
-  let _ =
-    List.fold_left (
-      fun x y -> if x = y then raise (Multiple_names x) else y
-    ) "" xs
-  in
+  let xs =
+    List.filter_map
+      (function Eager s | Lazy s -> Some s | _ -> None) bs in
+    List.check_dup (fun s -> raise (Multiple_names s)) xs;
     List.fold_left add_bind ctx bs
 
 let rec fresh_name ctx x =

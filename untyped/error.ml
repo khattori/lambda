@@ -11,6 +11,8 @@ let report e = (
         fprintf stderr "Unterminated string\n"
     | Absyn.Parse_error ->
         fprintf stderr "Syntax error\n"
+    | Absyn.Multiple_labels l ->
+        fprintf stderr "Multiple labels defined: %s\n" l
     | Context.Multiple_names s ->
         fprintf stderr "Multiple names defined: %s\n" s
     | Context.Unbound_name s ->
