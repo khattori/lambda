@@ -3,8 +3,8 @@ exception Unbound_name of string
 
 type binder =
   | Wild
-  | Eager * string
-  | Lazy * string
+  | Eager of string
+  | Lazy of string
 
 type 'a binding =
   | NameBind
@@ -22,19 +22,23 @@ let rec name2index ctx x =
     | [] -> raise (Unbound_name x)
     | (y,_)::rest ->
         if y = x then 0 else 1 + (name2index rest x)
-
 let add_term ctx x tm o =
   (x,TermBind(tm,o))::ctx
-let add_name ctx x =
-  (x,NameBind)::ctx
-let add_names ctx xs =
-  let xs' = List.sort compare xs in
+
+let add_bind ctx b = match b with
+  | Wild    -> ("_",NameBind)::ctx
+  | Eager x -> (x,  NameBind)::ctx
+  | Lazy x  -> (x,  NameBind)::ctx
+let add_binds ctx bs =
+  let bs' = List.filter (function Eager s | Lazy s -> true | _ -> false) bs in
+  let xs = List.map (function Eager s | Lazy s -> s | _ -> assert false) bs' in
+  let xs = List.sort compare xs in
   let _ =
     List.fold_left (
       fun x y -> if x = y then raise (Multiple_names x) else y
-    ) "" xs'
+    ) "" xs
   in
-    List.fold_left add_name ctx xs
+    List.fold_left add_bind ctx bs
 
 let rec fresh_name ctx x =
   if List.mem_assoc x ctx

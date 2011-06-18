@@ -42,32 +42,33 @@ let rec to_string ctx tm =
     | TmVar x -> Context.index2name ctx x
     | TmCon c -> Const.to_string c
     | TmAbs(bs,tm) ->
-        let s = bind_type_to_string s in
-        let ctx',x' = Context.fresh_name ctx x in
-          sprintf "(%s\\%s" s x' ^ "." ^ to_string ctx' tm ^ ")"
+        let ctx',s = to_string_binds ctx bs in
+          sprintf "(\\%s.%s)" s (to_string ctx' tm)
     | TmApp(tm1,tm2) ->
-        "(" ^ to_string ctx tm1 ^ " " ^ to_string ctx tm2 ^ ")"
-    | TmLet(binds,tm2) ->
-        "(let " ^
-          let ctx',s = List.fold_left (to_string_bind ctx) (ctx,"") binds
-          in
-            s ^ "in " ^ to_string ctx' tm2 ^ ")"
-    | TmCas(tm1,cases,def) ->
-        "(case " ^ to_string ctx tm1 ^ " of " ^
-            String.concat " | " (
-              (List.map (to_string_case ctx) cases) @ (
-                match def with
-              | None -> []
-              | Some tm2 -> [sprintf "... -> %s" (to_string ctx tm2)] )) ^
-          ")"
+        sprintf "(%s %s)" (to_string ctx tm1) (to_string ctx tm2)
+    | TmLet(bs,tm1,tm2) ->
+        let ctx',s = to_string_binds ctx bs in
+          sprintf "(let %s = %s in %s)"
+            s (to_string ctx tm1) (to_string ctx' tm2)
+    | TmCas(tm1,cases) ->
+        sprintf "(case %s of %s)"
+          (to_string ctx tm1)
+          (String.concat " | " (List.map (to_string_case ctx) cases))
     | TmTpl tms ->
-        "(" ^ String.concat ", " (List.map (to_string ctx) tms) ^ ")"
-and to_string_case ctx (c,tm) =
-  sprintf "%s -> %s" (Const.to_string c) (to_string ctx tm)
-and to_string_bind ctx (ctx',str) (s,x,tm) =
-  let s = bind_type_to_string s in
-  let ctx'', x' = Context.fresh_name ctx' x in
-    ctx'', str ^ sprintf "%s%s = " s x' ^ to_string ctx tm ^ "; "
+        sprintf "(%s)" (String.concat ", " (List.map (to_string ctx) tms))
+and to_string_case ctx case = match case with
+  | PatnCase(c,tm) -> sprintf "%s -> %s" (Const.to_string c) (to_string ctx tm)
+  | DeflCase tm    -> sprintf "... -> %s" (to_string ctx tm)
+and to_string_binds ctx bs =
+  let tsb (ctx',ss) b = match b with
+    | Wild -> (Context.add_bind ctx' b),"_"::ss
+    | Eager x ->
+        let ctx'',x' = Context.fresh_name ctx' x in ctx'',x'::ss
+    | Lazy x ->
+        let ctx'',x' = Context.fresh_name ctx' x in ctx'',sprintf "\\%s" x'::ss
+  in
+  let ctx',ss = List.fold_left tsb (ctx,[]) bs in
+    ctx',String.concat "," (List.rev ss)
 
 (*
  * print: ’ŠÛ\•¶–Ø‚Ìo—Í
@@ -83,19 +84,16 @@ let rec print ctx tm =
 let term_map onvar t =
   let rec walk c t = match t with
     | TmVar x         -> onvar c x
-    | TmAbs(s,x,t1)   -> TmAbs(s,x,walk (c + 1) t1)
+    | TmAbs(bs,t1)    -> TmAbs(bs,walk (c + 1) t1)
     | TmApp(t1,t2)    -> TmApp(walk c t1,walk c t2)
-    | TmLet(binds,t2) ->
-        TmLet(List.map (fun (s,x,t1) -> s,x,walk c t1) binds,
-              walk (c + (List.length binds)) t2)
-    | TmCas(t1,cs,t2opt) ->
+    | TmLet(bs,t1,t2) -> TmLet(bs,walk c t1, walk (c + (List.length bs)) t2)
+    | TmCas(t1,cs)    ->
         TmCas(walk c t1,
-              List.map (fun (con,t) -> con,walk c t) cs,
-              walk_opt c t2opt)
-    | TmTpl(ts) -> TmTpl(List.map (walk c) ts)
+              List.map (function
+                          | PatnCase(con,t) -> PatnCase(con,walk c t)
+                          | DeflCase t -> DeflCase(walk c t)) cs)
+    | TmTpl(ts)       -> TmTpl(List.map (walk c) ts)
     | con             -> con
-  and walk_opt c topt = match topt with
-    | None -> None | Some t -> Some(walk c t)
   in
     walk 0 t
 

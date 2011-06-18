@@ -51,9 +51,11 @@ toplevel
 ;
 command
   : expression                     { fun ctx -> Eval($1 ctx) }
-  | DEF binder_list EQ expression  { fun ctx -> Defn($2 ctx,$4 ctx) }
-  | DATA IDENT arity_option        { fun ctx -> Data($2,$3) }
-  | /* empty */                    { fun ctx -> Noop }
+  | DEF binder_list EQ expression  { fun ctx ->
+                                       let bs,_ = $2 ctx in
+                                         Defn(bs,$4 ctx)     }
+  | DATA IDENT arity_option        { fun ctx -> Data($2,$3)  }
+  | /* empty */                    { fun ctx -> Noop         }
 ;
 arity_option
   : /* empty */  { 0 }
@@ -63,7 +65,7 @@ binder_list
   : binder_comma_list {
       fun ctx ->
         let bs = List.rev ($1 ctx) in
-          bs, Context.add_names ctx bs
+          bs, Context.add_binds ctx bs
     }
 ;
 binder_comma_list
@@ -117,4 +119,5 @@ atomic_expression
   : IDENT                    { fun ctx -> TmVar(Context.name2index ctx $1) }
   | CONST                    { fun ctx -> TmCon $1 }
   | LPAREN expression RPAREN { $2 }
+  | LPAREN RPAREN            { fun ctx -> Prims.nil }
 ;

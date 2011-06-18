@@ -76,14 +76,11 @@ let exit_ store cs = match cs with
   | _ -> assert false
 
 (** プリミティブの定義 *)
-
 let cstr_table = [
-  ( "::",    2 );
+  ( "nil", 0 )
 ]
-
+let nil = TmCon(CSym "nil")
 let dstr_table = [
-  ( "hd",    (1, hd_)    );
-  ( "tl",    (1, tl_)    );
   ( "iadd_", (2, iadd_)  );
   ( "isub_", (2, isub_)  );
   ( "imul_", (2, imul_)  );
@@ -114,13 +111,13 @@ let _ =
 (*
 data true;
 data false;
-def if    = \b.\(t1).\(t2).case b of true -> t1
-                                   | false -> t2
-                                   | ... -> (\x.error "if: type mismatch");
+def if    = \b.\\t1.\\t2.case b of true -> t1
+                                 | false -> t2
+                                 | ... -> (\x.error "if: type mismatch");
 def ==    = \t1.\t2.beq t1 t2 true false;
 def not   = \t.== t false;
-def andalso = \t1.\(t2).if t1 t2 false;
-def orelse  = \t1.\(t2).if t1 true t2;
+def andalso = \t1.\\t2.if t1 t2 false;
+def orelse  = \t1.\\t2.if t1 true t2;
 def !=    = \t1.\t2.beq t1 t2 false true;
 def >     = \t1.\t2.igt_ t1 t2 true false;
 def >=    = \t1.\t2.orelse (> t1 t2) (== t1 t2);
@@ -128,17 +125,17 @@ def <     = \t1.\t2.igt_ t2 t1 true false;
 def <=    = \t1.\t2.orelse (< t1 t2) (== t1 t2);
 def min   = \t1.\t2.if (<= t1 t2) t1 t2;
 def max   = \t1.\t2.if (>= t1 t2) t1 t2;
-
 def fix   = \f.(\x.f (x x)) (\x.f (x x));
-def fact  = fix (\(fact).\n.if (== n 0) 1 ( imul_ n (fact (isub_ n 1))));
+def fact  = fix (\\fact.\n.if (== n 0) 1 ( imul_ n (fact (isub_ n 1))));
 
-def evenodd =
-        fix (\(eo).:: (\n.if (== n 0) true (tl eo (isub_ n 1)))
-                           (\n.if (== n 0) false (hd eo (isub_ n 1))));
-def even = hd evenodd
-and odd  = tl evenodd;
+def maxv = fix (\\maxv.\x.\y.if (== y nil) x (if (> x y) (maxv x) (maxv y)));
+def minv = fix (\\minv.\x.\y.if (== y nil) x (if (> x y) (minv y) (minv x)));
 
-
-
+def even,odd =
+  let evenodd =
+     fix (\\eo.:: (\n.if (== n 0) true (tl eo (isub_ n 1)))
+                          (\n.if (== n 0) false (hd eo (isub_ n 1))))
+  in 
+    hd evenodd,tl evenodd;
 
 *)

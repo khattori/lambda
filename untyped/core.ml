@@ -4,6 +4,8 @@ open Absyn
 open Const
 open Context
 
+
+exception Return_term of term
 (*
  * (...((C t1) t2) ... tn)を
  *    C,[t1;t2;...;tn]の形にする
@@ -23,82 +25,112 @@ let rec apply tm tms =
 
 (*
  * delta_reduc: δ簡約
- *
  *)
 let delta_reduc store tm =
   let d,args = flatten tm in
     Prims.dstr_apply d store args
 
 (*
-  v ::= z | m | \z.t | c v1 ... vk
+ * case_reduc: case簡約
+ * 
+ * case c v1…vn of c1 -> t1 | c2 -> t2 | … | cm -> tm | ... -> t
+ * →
+ * - ti v1…vn    --- if c = c2
+ * - t (c v1…vn) --- else
+ *)
+let case_reduc v cs =
+  try
+    let c,vs = flatten v in
+      List.iter (
+        function
+          | PatnCase(c',tm) when c = c' -> raise (Return_term(apply tm vs))
+          | DeflCase tm -> raise (Return_term(TmApp(tm,v)))
+          | _ -> ()
+      ) cs;
+      (Prims.tm_error "*** no match case ***")
+  with Return_term tm -> tm
 
-  E ::= []
-      | E t
-      | v E
-      | let zn = v1 and z2 = v2 and ... and zi = Ei and ... zn = En in t
-let x,y,... = 1,2,3
-  (\z.t) v → [z/v]t
-  (\(z).t') t → [z/t']t
-  let z ::= t1 in t2 → [z/t1]t2
-  let z1 = v1 and z2 = t2 and ... zn = tn in t2 →
-      let z2 = t2 and ... zn = tn in [z/v]t2
-*)
-let rec eval_step ctx store tm =
-  match tm with
-    | TmApp(TmAbs(Eager,x,tm1),tm2) when is_value tm2 ->
-        term_subst_top tm1 tm2         (* β-reduc *)
-    | TmApp(TmAbs(Lazy,x,tm1),tm2) ->
-        term_subst_top tm1 tm2         (* β-reduc *)
-    | tm when is_dstr_value tm ->
-        delta_reduc store tm      (* δ-reduc *)
-    | TmApp(tm1,tm2) when is_cstr_value tm1 ->
-        Prims.tm_error "*** invalid apply ***"
-    | TmApp(tm1,tm2) when is_value tm1 ->
-        let tm2' = eval ctx store tm2 in
-          TmApp(tm1, tm2')
-    | TmApp(tm1,tm2) ->
-        let tm1' = eval ctx store tm1 in
-          TmApp(tm1', tm2)
-    | TmLet(binds,tm2) ->
-        trans_binds binds tm2
-    | TmVar x ->
-        let tm',o = Context.get_term ctx x in
-          term_shift (x + o) tm'
-    | TmCas(tm1,cs,tm2opt) when is_cstr_value tm1 ->
-        let c,vs = flatten tm1 in (
-            try
-              let tm' = List.assoc c cs in
-                apply tm' vs
-            with
-                Not_found -> (
-                  match tm2opt with
-                    | Some tm' -> TmApp(tm',tm1)
-                    | None -> Prims.tm_error "*** no match case ***"
-                )
-          )
-    | TmCas(tm1,cs,tm2opt) ->
-        TmCas(eval ctx store tm1,cs,tm2opt)
-    | TmTpl tms ->
-        TmTpl(List.map
-                (fun tm -> if is_value tm then tm else eval ctx store tm)
-                tms)
-    | _ ->
-        Prims.tm_error "*** no eval rule ***"
 (*
-  let x,y,z = 2,3,4
-  let x1 = E1 and x2 = E2 and ... xn = En
-    where y1 = E1 and and y2 = E2 and ... ym = Em
-  in E'
-  ===>
-  ((...((\x1.\x2...\xn.E') E1) E2) ...) En)
-*)
-and trans_binds binds tm =
-  List.fold_left (fun tm (_,_,tm') -> TmApp(tm,tm'))
-    (List.fold_right (fun (s,x,_) tm -> TmAbs(s,x,tm)) binds tm)
-    binds
+ * [構文]
+ * 
+ * v ::= x | m | \b1,…,bn.t | c v1…vn | v1,…,vn
+ * t ::= t1 t 2
+ *     | let b1,…,bn = t1 in t2
+ *     | case t of c1 -> t1 | … | ... -> t
+ *     | t1,…,tn
+ * b ::= x | \x | _
+ * E ::= []
+ *     | E t | (\x.t) E | (\_.t) E | (\bs.t) T
+ *     | case E of c1 -> t1 | … | ... -> t
+ *     | (v1,…,Ei,…,tn)
+ * T ::= []
+ *     | E t | (\x.t) E | (\_.t) E | (\bs.t) T
+ *     | case E of c1 -> t1 | … | ... -> t
+ * 
+ * [letの変換]
+ * let b1,…,bn = t1 in t2 ⇒ (\b1,…,bn.t2) t1
+ * 
+ * [tuple適用の変換]
+ * (\b1,…,bn.t) (t1,…,tn) ⇒ ((…(((\b1.(\b2.(….(\bn.t)…))) t1) t2)…) tn)
+ * 
+ * [β簡約規則]
+ * (\_.t) v → v
+ * (\x.t) v → t[x:=v]
+ * (\\x.t) t' → t[x:=t']
+ * 
+ *)
+let rec eval_step ctx store tm = match tm with
+  | TmLet(bs,tm1,tm2) ->
+      TmApp(TmAbs(bs,tm2),tm1)
+  | TmApp(TmAbs(bs,tm2),TmTpl(tms)) ->
+      if List.length bs == List.length tms then
+        List.fold_left (fun tm tm' -> TmApp(tm,tm'))
+          (List.fold_right (fun b tm -> TmAbs([b],tm)) bs tm2)
+          tms
+      else
+        Prims.tm_error "*** tuple mismatch ***"
+  | TmApp(TmAbs([(Eager _|Wild) as b],tm2),tm1) ->
+      if is_value tm1 then
+        term_subst_top tm2 tm1
+      else
+        TmApp(TmAbs([b],tm2),eval_step ctx store tm1)
+  | TmApp(TmAbs([Lazy _],tm2),tm1) ->
+      term_subst_top tm2 tm1
+  | TmApp(TmAbs(bs,tm2),tm1) ->
+      TmApp(TmAbs(bs,tm2),eval_step ctx store tm1)
+  | tm when is_dstr_value tm ->
+      delta_reduc store tm
+  | TmApp(tm1,tm2) when not (is_cstr_value tm1) ->
+      if is_value tm1 then
+        TmApp(tm1,eval_step ctx store tm2)
+      else
+        TmApp(eval_step ctx store tm1,tm2)
+  | TmVar x ->
+      let tm',o = Context.get_term ctx x in
+        term_shift (x + o) tm'
+  | TmCas(tm1,cs) when is_cstr_value tm1 ->
+      case_reduc tm1 cs
+  | TmCas(tm1,cs) ->
+      TmCas(eval_step ctx store tm1,cs)
+  | TmTpl tms ->
+      TmTpl(List.map
+              (fun tm -> if is_value tm then tm else eval_step ctx store tm)
+              tms)
+  | _ -> Prims.tm_error "*** no eval rule ***"
 
-and eval ctx store tm =
+let eval_tuple ctx store tm =
+  let rec iter tm = match tm with
+    | TmTpl _ -> tm
+    | tm when is_value tm -> tm
+    | _ -> iter (eval_step ctx store tm)
+  in
+    iter tm
+
+let eval ctx store tm =
   let rec iter tm =
-    if is_value tm then tm else iter (eval_step ctx store tm)
+    if is_value tm then
+      tm
+    else
+      iter (eval_step ctx store tm)
   in
     iter tm

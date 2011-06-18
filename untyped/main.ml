@@ -6,29 +6,37 @@ let print_prompt() =
   print_string prompt;
   flush stdout
 
-let print_bind ctx x s tm =
-  print_string(bind_type_to_string s);
-  print_string x;
-  print_string "="
-  print ctx tm;
-  print_newline()
+let print_bind ctx b tm =
+  match b with
+    | Wild    -> Printf.printf    "_ = %s\n"   (to_string ctx tm)
+    | Eager x -> Printf.printf   "%s = %s\n" x (to_string ctx tm)
+    | Lazy x  -> Printf.printf "\\%s = %s\n" x (to_string ctx tm)
 
 let repl parse tokenize =
   let lexbuf = Lexing.from_channel stdin in
   let store = Store.create() in
-  let def_binds ctx binds =
-    let rec loop ctx' o binds =
-      match binds with
-        | [] -> ctx'
-        | (Eager,x,tm)::binds' ->
-            let v = Core.eval ctx store tm in
-              print_bind ctx x Eager v;
-              loop (Context.add_term ctx' x v o) (o + 1) binds'
-        | (Lazy,x,tm)::binds' ->
-            print_bind ctx x Lazy tm;
-            loop (Context.add_term ctx' x tm o) (o + 1) binds'
+  let def_binds ctx bs tm =
+    let rec iter bs tms o ctx' = match bs,tms with
+      | [],[] -> ctx'
+      | Wild as b::bs',tm::tms' ->
+          let v = Core.eval ctx store tm in
+            print_bind ctx b v;
+            iter bs' tms' o ctx'
+      | (Eager x) as b::bs',tm::tms' ->
+          let v = Core.eval ctx store tm in
+            print_bind ctx b v;
+            iter bs' tms' (o + 1) (Context.add_term ctx' x v o)
+      | (Lazy x) as b::bs',tm::tms' ->
+          print_bind ctx b tm;
+          iter bs' tms' (o + 1) (Context.add_term ctx' x tm o)
+      | _ -> assert false
     in
-      loop ctx 1 binds
+      match bs with
+        | [b] -> iter bs [tm] 1 ctx
+        | bs -> match Core.eval_tuple ctx store tm with
+            | TmTpl tms when List.length bs == List.length tms ->
+                iter bs tms 1 ctx
+            | _ -> failwith "*** tuple mismatch ***"
   in
   let rec loop ctx =
     print_prompt();
@@ -39,20 +47,17 @@ let repl parse tokenize =
         match result ctx with
           | Eval tm ->
               let v = Core.eval ctx store tm in
-                print ctx tm;
-                print_newline();
-                print_string "===> ";
-                print ctx v;
+                Printf.printf
+                  "%s\n===> %s\n" (to_string ctx tm) (to_string ctx v);
                 ctx
-          | Defn binds -> def_binds ctx binds
+          | Defn(bs,tm) -> def_binds ctx bs tm
           | Data(c,arity) ->
               Const.add_cstr c arity;
-              Printf.printf "data %s(%d)" c arity;
+              Printf.printf "data %s\\%d\n" c arity;
               ctx
-          | Noop -> ctx
+          | Noop -> print_newline(); ctx
       )
       in
-        print_newline();
         loop ctx
     with e -> Error.report e
     ); loop ctx
