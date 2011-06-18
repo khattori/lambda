@@ -14,12 +14,11 @@ exception Parse_error
       | E1 E2
       | let B = E1 in E2
       | case E of c1 -> E1 | ... -> En
-      | E1,...,En
+      | E1,...,En                         --- タプル
+      | { b1 = E1; ...; bn = En }         --- レコード
+      | E.l                               --- 要素参照 
+  b ::= l | \l | _     l (∈ Label) 
   B ::= x | \x | _ | B,B 
-  ,_ 0個以上捨てられる
-  ,x...  0個以上のtuple
-let xs... 
-let _,x,xs ... xsはnilか，単値か，タプル値となる
 *)
 
 type term =
@@ -30,6 +29,8 @@ type term =
   | TmLet of binder list * term * term
   | TmCas of term * case list
   | TmTpl of term list
+  | TmRcd of (binder * term) list
+  | TmLbl of term * string
 and case = PatnCase of Const.t * term | DeflCase of term
 and command =
   | Defn of binder list * term
@@ -42,12 +43,12 @@ let rec to_string ctx tm =
     | TmVar x -> Context.index2name ctx x
     | TmCon c -> Const.to_string c
     | TmAbs(bs,tm) ->
-        let ctx',s = to_string_binds ctx bs in
+        let ctx',s = to_string_binders ctx bs in
           sprintf "(\\%s.%s)" s (to_string ctx' tm)
     | TmApp(tm1,tm2) ->
         sprintf "(%s %s)" (to_string ctx tm1) (to_string ctx tm2)
     | TmLet(bs,tm1,tm2) ->
-        let ctx',s = to_string_binds ctx bs in
+        let ctx',s = to_string_binders ctx bs in
           sprintf "(let %s = %s in %s)"
             s (to_string ctx tm1) (to_string ctx' tm2)
     | TmCas(tm1,cases) ->
@@ -56,10 +57,19 @@ let rec to_string ctx tm =
           (String.concat " | " (List.map (to_string_case ctx) cases))
     | TmTpl tms ->
         sprintf "(%s)" (String.concat ", " (List.map (to_string ctx) tms))
+    | TmLbl(tm1,l) ->
+        sprintf "%s.%s" (to_string ctx tm1) l
+    | TmRcd rcd ->
+        sprintf "{ %s }"
+          (String.concat "; " (List.map (to_string_binding ctx) rcd))
 and to_string_case ctx case = match case with
   | PatnCase(c,tm) -> sprintf "%s -> %s" (Const.to_string c) (to_string ctx tm)
   | DeflCase tm    -> sprintf "... -> %s" (to_string ctx tm)
-and to_string_binds ctx bs =
+and to_string_binding ctx (binder,tm) = match binder with
+  | Wild    -> sprintf    "_ = %s"   (to_string ctx tm)
+  | Eager x -> sprintf   "%s = %s" x (to_string ctx tm)
+  | Lazy  x -> sprintf "\\%s = %s" x (to_string ctx tm)
+and to_string_binders ctx bs =
   let tsb (ctx',ss) b = match b with
     | Wild -> (Context.add_bind ctx' b),"_"::ss
     | Eager x ->
@@ -93,6 +103,8 @@ let term_map onvar t =
                           | PatnCase(con,t) -> PatnCase(con,walk c t)
                           | DeflCase t -> DeflCase(walk c t)) cs)
     | TmTpl(ts)       -> TmTpl(List.map (walk c) ts)
+    | TmRcd(bs)       -> TmRcd(List.map (fun (b,t) -> b,walk c t) bs)
+    | TmLbl(t1,l)     -> TmLbl(walk c t1,l)
     | con             -> con
   in
     walk 0 t
@@ -164,6 +176,12 @@ let rec is_value tm =
     match tm with
       | TmApp(tm1,tm2) when is_value tm2 -> walk tm1 - 1
       | TmTpl tms when List.for_all is_value tms -> 0
+      | TmRcd bs
+          when
+            List.for_all
+              (fun (b,t) ->
+                 match b with Wild | Eager _ -> is_value t | _ -> true) bs
+            -> 0
       | TmCon(c) when Const.is_cstr c -> Const.arity c
       | TmCon(c) when Const.is_dstr c -> Const.arity c - 1
       | TmCon _ | TmAbs _ -> 0

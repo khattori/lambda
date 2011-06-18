@@ -22,6 +22,8 @@
 %token BACKSLASH
 %token LPAREN
 %token RPAREN
+%token LBRACE
+%token RBRACE
 %token EQ
 %token WILDCARD
 %token <string>  IDENT
@@ -69,13 +71,13 @@ binder_list
     }
 ;
 binder_comma_list
-  : binder                         { fun ctx -> [$1 ctx] }
-  | binder_comma_list COMMA binder { fun ctx -> $3 ctx::$1 ctx }
+  : binder                         { fun ctx -> [$1] }
+  | binder_comma_list COMMA binder { fun ctx -> $3::$1 ctx }
 ;
 binder
-  : WILDCARD        { fun ctx -> Wild }
-  | IDENT           { fun ctx -> Eager $1 }
-  | BACKSLASH IDENT { fun ctx -> Lazy  $2 }
+  : WILDCARD        { Wild }
+  | IDENT           { Eager $1 }
+  | BACKSLASH IDENT { Lazy  $2 }
 ;
 
 expression_comma_list
@@ -116,8 +118,15 @@ apply_expression
 ;
 
 atomic_expression
-  : IDENT                    { fun ctx -> TmVar(Context.name2index ctx $1) }
-  | CONST                    { fun ctx -> TmCon $1 }
-  | LPAREN expression RPAREN { $2 }
-  | LPAREN RPAREN            { fun ctx -> Prims.nil }
+  : IDENT                       { fun ctx -> TmVar(Context.name2index ctx $1) }
+  | CONST                       { fun ctx -> TmCon $1 }
+  | atomic_expression DOT IDENT { fun ctx -> TmLbl($1 ctx, $3) }
+  | LPAREN expression RPAREN    { $2 }
+  | LPAREN RPAREN               { fun ctx -> Prims.nil }
+  | LBRACE record RBRACE        { fun ctx -> TmRcd($2 ctx) }
+  | LBRACE RBRACE               { fun ctx -> Prims.nil }
+;
+record
+  : binder EQ expression             { fun ctx -> [$1,$3 ctx] }
+  | binder EQ expression SEMI record { fun ctx -> ($1,$3 ctx)::$5 ctx}
 ;

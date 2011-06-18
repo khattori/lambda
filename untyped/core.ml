@@ -116,6 +116,24 @@ let rec eval_step ctx store tm = match tm with
       TmTpl(List.map
               (fun tm -> if is_value tm then tm else eval_step ctx store tm)
               tms)
+  | TmRcd rcd ->
+      TmRcd(List.map
+              (fun (b,t) ->
+                 match b with
+                   | (Wild | Eager _) when is_value t -> b,t
+                   | Lazy _ -> b,t
+                   | _ -> b,eval_step ctx store t) rcd)
+  | TmLbl(TmRcd rcd,l) -> (
+      try
+        snd(List.find
+              (fun (b,t) ->
+                 match b with
+                   | (Eager x | Lazy x) when x = l -> true
+                   | _ -> false) rcd)
+      with Not_found -> Prims.tm_error "*** label not found ***"
+    )
+  | TmLbl(t1,l) ->
+      TmLbl(eval_step ctx store t1,l)
   | _ -> Prims.tm_error "*** no eval rule ***"
 
 let eval_tuple ctx store tm =

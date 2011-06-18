@@ -7,10 +7,8 @@ let print_prompt() =
   flush stdout
 
 let print_bind ctx b tm =
-  match b with
-    | Wild    -> Printf.printf    "_ = %s\n"   (to_string ctx tm)
-    | Eager x -> Printf.printf   "%s = %s\n" x (to_string ctx tm)
-    | Lazy x  -> Printf.printf "\\%s = %s\n" x (to_string ctx tm)
+  print_string (to_string_binding ctx (b,tm));
+  print_newline()
 
 let repl parse tokenize =
   let lexbuf = Lexing.from_channel stdin in

@@ -75,6 +75,8 @@ rule token = parse
   (* セパレータ *)
   | "(" { LPAREN }
   | ")" { RPAREN }
+  | "{" { LBRACE }
+  | "}" { RBRACE }
   | "." { DOT }
   | "," { COMMA }
   | float_literal
