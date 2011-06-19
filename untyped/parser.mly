@@ -13,6 +13,7 @@
 %token DATA
 %token CASE
 %token OF
+%token QUOTE
 %token RARROW
 %token DDDOT
 %token DOT
@@ -101,6 +102,9 @@ expression
     }
   | CASE expression OF case_list {
       fun ctx -> TmCas($2 ctx, $4 ctx)
+    }
+  | QUOTE atomic_expression {
+      fun ctx -> TmQuo($2 ctx)
     }
 ;
 

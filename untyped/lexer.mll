@@ -16,6 +16,7 @@
     ( "data",  DATA  );
     ( "case",  CASE  );
     ( "of",    OF    );
+    ( "quote", QUOTE );
   ]
 
 }

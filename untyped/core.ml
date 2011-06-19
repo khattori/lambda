@@ -2,6 +2,7 @@
 open Absyn
 open Const
 open Context
+open Prims
 
 exception Return_term of term
 (*
@@ -26,7 +27,7 @@ let rec apply tm tms =
  *)
 let delta_reduc store tm =
   let d,args = flatten tm in
-    Prims.dstr_apply d store args
+    dtor_apply d store args
 
 (*
  * case_reduc: caseŠÈ–ñ
@@ -45,8 +46,47 @@ let case_reduc v cs =
           | DeflCase tm -> raise (Return_term(TmApp(tm,v)))
           | _ -> ()
       ) cs;
-      (Prims.tm_error "*** no match case ***")
+      (tm_error "*** no match case ***")
   with Return_term tm -> tm
+
+let bind_to_ctor b = match b with
+  | Wild -> bn_wild
+  | Eager x -> bn_eager x
+  | Lazy x -> bn_lazy x
+let binds_to_ctor bs =
+  TmTpl(List.map (fun b -> bind_to_ctor b) bs)
+
+let con_to_ctor c = match c with
+  | CInt n  -> cn_int n
+  | CReal r -> cn_rea r
+  | CStr s  -> cn_str s
+  | CSym s  -> cn_sym s
+  | CMem m  -> cn_mem m
+
+let rec term_to_ctor ctx tm = match tm with
+  | TmVar x -> tm_var x
+  | TmCon c -> tm_con(con_to_ctor c)
+  | TmAbs(bs,tm) ->
+      tm_abs (binds_to_ctor bs) (term_to_ctor ctx tm)
+  | TmApp(tm1,tm2) ->
+      tm_app (term_to_ctor ctx tm1) (term_to_ctor ctx tm2)
+  | TmLet(bs,tm1,tm2) ->
+      tm_let (binds_to_ctor bs) (term_to_ctor ctx tm1) (term_to_ctor ctx tm2)
+  | TmCas(tm1,cs) ->
+      tm_cas (term_to_ctor ctx tm1) (cases_to_ctor ctx cs)
+  | TmTpl tms -> tm_tpl (terms_to_ctor ctx tms)
+  | TmRcd rs -> tm_rcd (record_to_ctor ctx rs)
+  | TmLbl(tm,l) -> tm_lbl (term_to_ctor ctx tm) l
+  | TmQuo tm -> tm_quo (term_to_ctor ctx tm)
+and terms_to_ctor ctx tms =
+  TmTpl(List.map (term_to_ctor ctx) tms)
+and cases_to_ctor ctx cs =
+  TmTpl(List.map (case_to_ctor ctx) cs)
+and case_to_ctor ctx case = match case with
+  | PatnCase(c,t) -> ca_pat (con_to_ctor c) (term_to_ctor ctx t)
+  | DeflCase t -> ca_dfl (term_to_ctor ctx t)
+and record_to_ctor ctx rcd =
+  TmTpl(List.map (fun (b,t) -> TmTpl([bind_to_ctor b;term_to_ctor ctx t])) rcd)
 
 (*
  * [\•¶]
@@ -96,9 +136,9 @@ let rec eval_step ctx store tm = match tm with
       term_subst_top tm2 tm1
   | TmApp(TmAbs(bs,tm2),tm1) ->
       TmApp(TmAbs(bs,tm2),eval_step ctx store tm1)
-  | tm when is_dstr_value tm ->
+  | tm when is_dtor_value tm ->
       delta_reduc store tm
-  | TmApp(tm1,tm2) when not (is_cstr_value tm1) ->
+  | TmApp(tm1,tm2) when not (is_ctor_value tm1) ->
       if is_value tm1 then
         TmApp(tm1,eval_step ctx store tm2)
       else
@@ -106,7 +146,7 @@ let rec eval_step ctx store tm = match tm with
   | TmVar x ->
       let tm',o = Context.get_term ctx x in
         term_shift (x + o) tm'
-  | TmCas(tm1,cs) when is_cstr_value tm1 ->
+  | TmCas(tm1,cs) when is_ctor_value tm1 ->
       case_reduc tm1 cs
   | TmCas(tm1,cs) ->
       TmCas(eval_step ctx store tm1,cs)
@@ -128,11 +168,12 @@ let rec eval_step ctx store tm = match tm with
                  match b with
                    | (Eager x | Lazy x) when x = l -> true
                    | _ -> false) rcd)
-      with Not_found -> Prims.tm_error "*** label not found ***"
+      with Not_found -> tm_error "*** label not found ***"
     )
   | TmLbl(t1,l) ->
       TmLbl(eval_step ctx store t1,l)
-  | _ -> Prims.tm_error "*** no eval rule ***"
+  | TmQuo(t1) -> term_to_ctor ctx t1
+  | _ -> tm_error "*** no eval rule ***"
 
 let eval_tuple ctx store tm =
   let rec iter tm = match tm with

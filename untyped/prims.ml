@@ -56,7 +56,7 @@ let asn_ store cs = match cs with
   | _ -> tm_error_wrong_argument_type "asn_"
 (* 等価比較 *)
 let beq_ store cs = match cs with
-  | [c1; c2; v1; v2] when is_cstr_value c1 && is_cstr_value c2 && c1 = c2 -> v1
+  | [c1; c2; v1; v2] when is_ctor_value c1 && is_ctor_value c2 && c1 = c2 -> v1
   | [x; y; v1; v2] -> v2
   | _ -> assert false
 
@@ -76,11 +76,62 @@ let exit_ store cs = match cs with
   | _ -> assert false
 
 (** プリミティブの定義 *)
-let cstr_table = [
-  ( "nil", 0 )
+let ctor_table = [
+  ( "nil", 0 );
+  (* 構文木 *)
+  (* type tm =      *)
+  ( "tm_var", 1); (* | TmVar of int *)
+  ( "tm_con", 1); (* | TmCon of Const.t *)
+  ( "tm_abs", 1); (* | TmAbs of binder list * term *)
+  ( "tm_app", 1); (* | TmApp of term * term *)
+  ( "tm_let", 1); (* | TmLet of binder list * term * term *)
+  ( "tm_cas", 1); (* | TmCas of term * case list *)
+  ( "tm_tpl", 1); (* | TmTpl of term list *)
+  ( "tm_rcd", 1); (* | TmRcd of (binder * term) list *)
+  ( "tm_lbl", 1); (* | TmLbl of term * string *)
+  ( "tm_quo", 1); (* | TmQuo of term *)
+  (* and case = PatnCase of Const.t * term | DeflCase of term *)
+  ( "ca_pat", 1);
+  ( "ca_dfl", 1);
+  (* 定数            type t =          *)
+  ( "cn_int", 1); (* | CInt  of int    *)
+  ( "cn_rea", 1); (* | CReal of float  *)
+  ( "cn_str", 1); (* | CStr  of string *)
+  ( "cn_sym", 1); (* | CSym  of string *)
+  ( "cn_mem", 1); (* | CMem  of int    *)
+  ( "bn_wild",  0);
+  ( "bn_eager", 1);
+  ( "bn_lazy",  1);
 ]
+
+let sym s = TmCon(CSym s)
 let nil = TmCon(CSym "nil")
-let dstr_table = [
+
+let bn_wild    = sym "bn_wild"
+let bn_eager x = TmApp(sym "bn_eager",TmCon(CStr x))
+let bn_lazy x  = TmApp(sym "bn_lazy", TmCon(CStr x))
+
+let ca_pat c t = TmApp(sym "ca_pat",TmTpl[c;t])
+let ca_dfl t   = TmApp(sym "ca_dfl",t)
+
+let cn_int n = TmApp(sym "cn_int",TmCon(CInt n))
+let cn_rea r = TmApp(sym "cn_rea",TmCon(CReal r))
+let cn_str s = TmApp(sym "cn_str",TmCon(CStr s))
+let cn_sym s = TmApp(sym "cn_sym",sym s)
+let cn_mem m = TmApp(sym "cn_mem",TmCon(CInt m))
+
+let tm_var x        = TmApp(sym "tm_var",TmCon(CInt x))
+let tm_con c        = TmApp(sym "tm_con",c)
+let tm_abs bs t     = TmApp(sym "tm_abs",TmTpl[bs;t])
+let tm_app t1 t2    = TmApp(sym "tm_app",TmTpl[t1;t2])
+let tm_let bs t1 t2 = TmApp(sym "tm_let",TmTpl[bs;t1;t2])
+let tm_cas t cs     = TmApp(sym "tm_cas",TmTpl[t;cs])
+let tm_tpl ts       = TmApp(sym "tm_tpl",ts)
+let tm_rcd rs       = TmApp(sym "tm_rcd",rs)
+let tm_lbl t l      = TmApp(sym "tm_lbl",TmTpl[t;TmCon(CStr l)])
+let tm_quo t        = TmApp(sym "tm_quo",t)
+
+let dtor_table = [
   ( "iadd_", (2, iadd_)  );
   ( "isub_", (2, isub_)  );
   ( "imul_", (2, imul_)  );
@@ -96,8 +147,8 @@ let dstr_table = [
   ( "error", (1, error_) );
 ]
 
-let dstr_apply d store vs =
-  let arity,f = List.assoc (get_symbol d) dstr_table in
+let dtor_apply d store vs =
+  let arity,f = List.assoc (get_symbol d) dtor_table in
     if arity == List.length vs then
       f store vs
     else
@@ -105,8 +156,8 @@ let dstr_apply d store vs =
 
 let _ =
   Const.table_ref :=
-    (List.map (fun (s,arity)     -> s,Cstr arity) cstr_table)
-  @ (List.map (fun (s,(arity,_)) -> s,Dstr arity) dstr_table)
+    (List.map (fun (s,arity)     -> s,Ctor arity) ctor_table)
+  @ (List.map (fun (s,(arity,_)) -> s,Dtor arity) dtor_table)
 
 (*
 data true;

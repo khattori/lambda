@@ -33,6 +33,7 @@ type term =
   | TmTpl of term list
   | TmRcd of (binder * term) list
   | TmLbl of term * string
+  | TmQuo of term
 and case = PatnCase of Const.t * term | DeflCase of term
 and command =
   | Defn of binder list * term
@@ -64,6 +65,8 @@ let rec to_string ctx tm =
     | TmRcd rcd ->
         sprintf "{ %s }"
           (String.concat "; " (List.map (to_string_binding ctx) rcd))
+    | TmQuo tm ->
+        sprintf "quote(%s)" (to_string ctx tm)
 and to_string_case ctx case = match case with
   | PatnCase(c,tm) -> sprintf "%s -> %s" (Const.to_string c) (to_string ctx tm)
   | DeflCase tm    -> sprintf "... -> %s" (to_string ctx tm)
@@ -107,6 +110,7 @@ let term_map onvar t =
     | TmTpl(ts)       -> TmTpl(List.map (walk c) ts)
     | TmRcd(bs)       -> TmRcd(List.map (fun (b,t) -> b,walk c t) bs)
     | TmLbl(t1,l)     -> TmLbl(walk c t1,l)
+    | TmQuo(t1)       -> TmQuo(walk c t1)
     | con             -> con
   in
     walk 0 t
@@ -184,8 +188,8 @@ let rec is_value tm =
               (fun (b,t) ->
                  match b with Wild | Eager _ -> is_value t | _ -> true) bs
             -> 0
-      | TmCon(c) when Const.is_cstr c -> Const.arity c
-      | TmCon(c) when Const.is_dstr c -> Const.arity c - 1
+      | TmCon(c) when Const.is_ctor c -> Const.arity c
+      | TmCon(c) when Const.is_dtor c -> Const.arity c - 1
       | TmCon _ | TmAbs _ -> 0
       | _ -> -1
   in
@@ -201,16 +205,16 @@ let check_value oncon tm =
     walk tm == 0
 
 (*
- * is_dstr_value: 項がデストラクタかどうか判定
+ * is_dtor_value: 項がデストラクタかどうか判定
  *)
-let is_dstr_value tm =
-  check_value Const.is_dstr tm
+let is_dtor_value tm =
+  check_value Const.is_dtor tm
 
 (*
- * is_cstr_value: 項がコンストラクタかどうか判定
+ * is_ctor_value: 項がコンストラクタかどうか判定
  *)
-let is_cstr_value tm =
-  check_value Const.is_cstr tm
+let is_ctor_value tm =
+  check_value Const.is_ctor tm
 
 (*
  * check_record: レコードに同一ラベル名が含まれているか判定
