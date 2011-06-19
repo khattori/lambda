@@ -22,7 +22,6 @@ exception Multiple_labels of string
   b ::= l | \l | _     l (¸ Label) 
   B ::= x | \x | _ | B,B 
 *)
-
 type term =
   | TmVar of int
   | TmCon of Const.t
@@ -41,9 +40,15 @@ and command =
   | Data of string * int
   | Noop
 
+let rec is_list tm = match tm with
+  | TmCon(Const.CSym "nil") -> true
+  | TmApp(TmCon(Const.CSym "cons"),TmTpl[_;t]) -> is_list t
+  | _ -> false
 let rec to_string ctx tm =
   match tm with
     | TmVar x -> Context.index2name ctx x
+    | tm when is_list tm ->
+        sprintf "[%s]" (String.concat "; " (to_string_list ctx tm))
     | TmCon c -> Const.to_string c
     | TmAbs(bs,tm) ->
         let ctx',s = to_string_binders ctx bs in
@@ -67,6 +72,11 @@ let rec to_string ctx tm =
           (String.concat "; " (List.map (to_string_binding ctx) rcd))
     | TmQuo tm ->
         sprintf "quote(%s)" (to_string ctx tm)
+and to_string_list ctx ts = match ts with
+  | TmCon(Const.CSym "nil") -> []
+  | TmApp(TmCon(Const.CSym "cons"),TmTpl[t;ts]) ->
+      to_string ctx t::to_string_list ctx ts
+  | _ -> assert false
 and to_string_case ctx case = match case with
   | PatnCase(c,tm) -> sprintf "%s -> %s" (Const.to_string c) (to_string ctx tm)
   | DeflCase tm    -> sprintf "... -> %s" (to_string ctx tm)

@@ -51,7 +51,7 @@ let repl parse tokenize =
           | Defn(bs,tm) -> def_binds ctx bs tm
           | Data(c,arity) ->
               Const.add_ctor c arity;
-              Printf.printf "data %s\\%d\n" c arity;
+              Printf.printf "data %s/%d\n" c arity;
               ctx
           | Noop -> print_newline(); ctx
       )

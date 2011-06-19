@@ -5,6 +5,7 @@ open Context
 open Prims
 
 exception Return_term of term
+exception Ctor_parse of string
 (*
  * (...((C t1) t2) ... tn)‚ð
  *    C,[t1;t2;...;tn]‚ÌŒ`‚É‚·‚é
@@ -53,8 +54,9 @@ let bind_to_ctor b = match b with
   | Wild -> bn_wild
   | Eager x -> bn_eager x
   | Lazy x -> bn_lazy x
-let binds_to_ctor bs =
-  TmTpl(List.map (fun b -> bind_to_ctor b) bs)
+let binds_to_ctor bs = match bs with
+  | [b] -> bind_to_ctor b
+  | bs -> TmTpl(List.map (fun b -> bind_to_ctor b) bs)
 
 let con_to_ctor c = match c with
   | CInt n  -> cn_int n
@@ -64,29 +66,84 @@ let con_to_ctor c = match c with
   | CMem m  -> cn_mem m
 
 let rec term_to_ctor ctx tm = match tm with
-  | TmVar x -> tm_var x
-  | TmCon c -> tm_con(con_to_ctor c)
-  | TmAbs(bs,tm) ->
-      tm_abs (binds_to_ctor bs) (term_to_ctor ctx tm)
-  | TmApp(tm1,tm2) ->
-      tm_app (term_to_ctor ctx tm1) (term_to_ctor ctx tm2)
+  | TmVar x        -> tm_var x
+  | TmCon c        -> tm_con (con_to_ctor c)
+  | TmAbs(bs,tm)   -> tm_abs (binds_to_ctor bs) (term_to_ctor ctx tm)
+  | TmApp(tm1,tm2) -> tm_app (term_to_ctor ctx tm1) (term_to_ctor ctx tm2)
   | TmLet(bs,tm1,tm2) ->
       tm_let (binds_to_ctor bs) (term_to_ctor ctx tm1) (term_to_ctor ctx tm2)
-  | TmCas(tm1,cs) ->
-      tm_cas (term_to_ctor ctx tm1) (cases_to_ctor ctx cs)
-  | TmTpl tms -> tm_tpl (terms_to_ctor ctx tms)
-  | TmRcd rs -> tm_rcd (record_to_ctor ctx rs)
-  | TmLbl(tm,l) -> tm_lbl (term_to_ctor ctx tm) l
-  | TmQuo tm -> tm_quo (term_to_ctor ctx tm)
-and terms_to_ctor ctx tms =
-  TmTpl(List.map (term_to_ctor ctx) tms)
-and cases_to_ctor ctx cs =
-  TmTpl(List.map (case_to_ctor ctx) cs)
+  | TmCas(tm1,cs)  -> tm_cas (term_to_ctor ctx tm1) (cases_to_ctor ctx cs)
+  | TmTpl tms      -> tm_tpl (terms_to_ctor ctx tms)
+  | TmRcd rs       -> tm_rcd (bdtms_to_ctor ctx rs)
+  | TmLbl(tm,l)    -> tm_lbl (term_to_ctor ctx tm) l
+  | TmQuo tm       -> tm_quo (term_to_ctor ctx tm)
+and terms_to_ctor ctx tms = TmTpl(List.map (term_to_ctor ctx) tms)
+and cases_to_ctor ctx cs  = match cs with
+  | [c] -> case_to_ctor ctx c
+  | cs -> TmTpl(List.map (case_to_ctor ctx) cs)
 and case_to_ctor ctx case = match case with
   | PatnCase(c,t) -> ca_pat (con_to_ctor c) (term_to_ctor ctx t)
-  | DeflCase t -> ca_dfl (term_to_ctor ctx t)
-and record_to_ctor ctx rcd =
-  TmTpl(List.map (fun (b,t) -> TmTpl([bind_to_ctor b;term_to_ctor ctx t])) rcd)
+  | DeflCase t    -> ca_dfl (term_to_ctor ctx t)
+and bdtm_to_ctor ctx (b,t) = TmTpl[bind_to_ctor b;term_to_ctor ctx t]
+and bdtms_to_ctor ctx rcd = match rcd with
+  | [bt] -> bdtm_to_ctor ctx bt
+  | bdtms -> TmTpl(List.map (bdtm_to_ctor ctx) bdtms)
+
+let ctor_to_con c = match c with
+  | TmApp(TmCon(CSym "cn_int"),TmCon(CInt _ as n)) -> n
+  | TmApp(TmCon(CSym "cn_rea"),TmCon(CReal _ as r)) -> r
+  | TmApp(TmCon(CSym "cn_str"),TmCon(CStr _ as s)) -> s
+  | TmApp(TmCon(CSym "cn_sym"),TmCon(CSym _ as s)) -> s
+  | TmApp(TmCon(CSym "cn_mem"),TmCon(CInt _ as m)) -> m
+  | _ -> raise(Ctor_parse "ctor_to_con")
+
+let ctor_to_bind b = match b with
+  | TmCon(CSym "bn_wild") -> Wild
+  | TmApp(TmCon(CSym "bn_eager"),TmCon(CStr x)) -> Eager x
+  | TmApp(TmCon(CSym "bn_lazy"),TmCon(CStr x)) -> Lazy x
+  | _ -> raise(Ctor_parse "ctor_to_bind")
+let ctor_to_binds bs = match bs with
+  | TmTpl bs -> List.map ctor_to_bind bs
+  | b -> [ctor_to_bind b]
+
+let rec ctor_to_case case = match case with
+  | TmApp(TmApp(TmCon(CSym "ca_pat"),c),t) ->
+      PatnCase(ctor_to_con c,ctor_to_term t)
+  | TmApp(TmCon(CSym "ca_dfl"),t) ->
+      DeflCase(ctor_to_term t)
+  | _ -> raise(Ctor_parse "ctor_to_case")
+and ctor_to_cases cs = match cs with
+  | TmTpl cs -> List.map ctor_to_case cs
+  | c -> [ctor_to_case c]
+and ctor_to_bdtm bt = match bt with
+  | TmTpl[b;t] -> ctor_to_bind b,ctor_to_term t
+  | _ -> raise(Ctor_parse "ctor_to_bdtm")
+and ctor_to_bdtms bdtms = match bdtms with
+  | TmTpl((TmTpl[b;t]::_) as bts) -> List.map ctor_to_bdtm bts
+  | TmTpl[b;t] -> [ctor_to_bdtm bdtms]
+  | _ -> raise(Ctor_parse "ctor_to_bdtms")
+and ctor_to_term tm = match tm with
+  | TmApp(TmCon(CSym "tm_var"),TmCon(CInt x)) -> TmVar x
+  | TmApp(TmCon(CSym "tm_con"),c) -> TmCon(ctor_to_con c)
+  | TmApp(TmCon(CSym "tm_abs"),TmTpl[bs;t]) ->
+      TmAbs(ctor_to_binds bs,ctor_to_term tm)
+  | TmApp(TmCon(CSym "tm_app"),TmTpl[t1;t2]) ->
+      TmApp(ctor_to_term t1,ctor_to_term t2)
+  | TmApp(TmCon(CSym "tm_let"),TmTpl[bs;t1;t2]) ->
+      TmLet(ctor_to_binds bs,ctor_to_term t1,ctor_to_term t2)
+  | TmApp(TmCon(CSym "tm_cas"),TmTpl[t;cs]) ->
+      TmCas(ctor_to_term t,ctor_to_cases cs)
+  | TmApp(TmCon(CSym "tm_tpl"),TmTpl ts) ->
+      TmTpl(List.map ctor_to_term ts)
+  | TmApp(TmCon(CSym "tm_rcd"),rs) ->
+      TmRcd(ctor_to_bdtms rs)
+  | TmApp(TmCon(CSym "tm_lbl"),TmTpl[t;TmCon(CStr l)]) ->
+      TmLbl(ctor_to_term t,l)
+  | TmApp(TmCon(CSym "tm_quo"),t) ->
+      TmQuo(ctor_to_term t)
+  | _ -> Prims.tm_error "*** ctor_to_term ***"
+
+let _ = Prims.ctor_to_term_ref := ctor_to_term
 
 (*
  * [\•¶]
@@ -118,15 +175,9 @@ and record_to_ctor ctx rcd =
  * 
  *)
 let rec eval_step ctx store tm = match tm with
+  | tm when is_value tm -> Prims.tm_error "*** no eval rule ***"
   | TmLet(bs,tm1,tm2) ->
       TmApp(TmAbs(bs,tm2),tm1)
-  | TmApp(TmAbs(bs,tm2),TmTpl(tms)) ->
-      if List.length bs == List.length tms then
-        List.fold_left (fun tm tm' -> TmApp(tm,tm'))
-          (List.fold_right (fun b tm -> TmAbs([b],tm)) bs tm2)
-          tms
-      else
-        Prims.tm_error "*** tuple mismatch ***"
   | TmApp(TmAbs([(Eager _|Wild) as b],tm2),tm1) ->
       if is_value tm1 then
         term_subst_top tm2 tm1
@@ -134,11 +185,18 @@ let rec eval_step ctx store tm = match tm with
         TmApp(TmAbs([b],tm2),eval_step ctx store tm1)
   | TmApp(TmAbs([Lazy _],tm2),tm1) ->
       term_subst_top tm2 tm1
+  | TmApp(TmAbs(bs,tm2),TmTpl(tms)) ->
+      if List.length bs == List.length tms then
+        List.fold_left (fun tm tm' -> TmApp(tm,tm'))
+          (List.fold_right (fun b tm -> TmAbs([b],tm)) bs tm2)
+          tms
+      else
+        Prims.tm_error "*** tuple mismatch ***"
   | TmApp(TmAbs(bs,tm2),tm1) ->
       TmApp(TmAbs(bs,tm2),eval_step ctx store tm1)
   | tm when is_dtor_value tm ->
       delta_reduc store tm
-  | TmApp(tm1,tm2) when not (is_ctor_value tm1) ->
+  | TmApp(tm1,tm2) ->
       if is_value tm1 then
         TmApp(tm1,eval_step ctx store tm2)
       else

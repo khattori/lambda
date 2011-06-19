@@ -60,6 +60,15 @@ let beq_ store cs = match cs with
   | [x; y; v1; v2] -> v2
   | _ -> assert false
 
+let is_const_ store cs = match cs with
+  | [c] when is_ctor_value c -> TmCon(CSym "true")
+  | _ -> TmCon(CSym "false")
+
+let ctor_to_term_ref = ref (fun (x:Absyn.term) -> x)
+let unquo_ store cs = match cs with
+  | [v] -> !ctor_to_term_ref v
+  | _ -> assert false
+
 (*
  * fix v => v (fix v)
  *)
@@ -77,7 +86,10 @@ let exit_ store cs = match cs with
 
 (** プリミティブの定義 *)
 let ctor_table = [
-  ( "nil", 0 );
+  ( "nil",  0 );
+  ( "cons", 1 );
+  ( "true",  0 );
+  ( "false", 0 );
   (* 構文木 *)
   (* type tm =      *)
   ( "tm_var", 1); (* | TmVar of int *)
@@ -105,7 +117,12 @@ let ctor_table = [
 ]
 
 let sym s = TmCon(CSym s)
-let nil = TmCon(CSym "nil")
+let nil = sym "nil"
+let cons x y = TmApp(sym "cons",TmTpl[x;y])
+
+let rec list xs = match xs with
+  | [] -> nil
+  | x::xs -> cons x (list xs)
 
 let bn_wild    = sym "bn_wild"
 let bn_eager x = TmApp(sym "bn_eager",TmCon(CStr x))
@@ -142,7 +159,9 @@ let dtor_table = [
   ( "!",     (1, drf_)   );
   ( ":=",    (2, asn_)   );
   ( "beq",   (4, beq_)   );
+  ( "is_const_",(1,is_const_));
 (*  ( "fix",   (1, fix_)   ); *)
+  ( "unquo", (1, unquo_)  );
   ( "exit",  (0, exit_)  );
   ( "error", (1, error_) );
 ]
@@ -160,8 +179,6 @@ let _ =
   @ (List.map (fun (s,(arity,_)) -> s,Dtor arity) dtor_table)
 
 (*
-data true;
-data false;
 def if    = \b.\\t1.\\t2.case b of true -> t1
                                  | false -> t2
                                  | ... -> (\x.error "if: type mismatch");

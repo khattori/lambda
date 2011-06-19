@@ -78,6 +78,8 @@ rule token = parse
   | ")" { RPAREN }
   | "{" { LBRACE }
   | "}" { RBRACE }
+  | "[" { LBRACKET }
+  | "]" { RBRACKET }
   | "." { DOT }
   | "," { COMMA }
   | float_literal
