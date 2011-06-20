@@ -1,6 +1,8 @@
+(** エラー情報の出力 *)
+
 open Printf
 
-(* �G���[���|�[�g *)
+(** エラー情報を出力する *)
 let report e = (
   match e with
     | Lexer.Illegal_character c ->

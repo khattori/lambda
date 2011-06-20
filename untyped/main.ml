@@ -1,6 +1,9 @@
+(** エントリポイント *)
+
 open Absyn
 open Context
 
+(* プロンプト記号の定義 *)
 let prompt = "> "
 let print_prompt() =
   print_string prompt;
@@ -10,6 +13,7 @@ let print_bind ctx b tm =
   print_string (to_string_binding ctx (b,tm));
   print_newline()
 
+(** Read-Eval-Print-Loop *)
 let repl parse tokenize =
   let lexbuf = Lexing.from_channel stdin in
   let store = Store.create() in

@@ -1,4 +1,4 @@
-(** lambda•]‰¿Ší *)
+(** lambdaè©•ä¾¡å™¨ *)
 open Absyn
 open Const
 open Context
@@ -7,8 +7,8 @@ open Prims
 exception Return_term of term
 exception Ctor_parse of string
 (*
- * (...((C t1) t2) ... tn)‚ğ
- *    C,[t1;t2;...;tn]‚ÌŒ`‚É‚·‚é
+ * (...((C t1) t2) ... tn)ã‚’
+ *    C,[t1;t2;...;tn]ã®å½¢ã«ã™ã‚‹
  *)
 let flatten tm =
   let rec iter tm args = match tm with
@@ -17,26 +17,27 @@ let flatten tm =
     | _ -> assert false
   in
     iter tm []
-(* flatten‚Æ‹t *)
+(* flattenã¨é€† *)
 let rec apply tm tms =
   match tms with
     | [] -> tm
     | tm'::tms' -> apply (TmApp(tm,tm')) tms'
 
 (*
- * delta_reduc: ƒÂŠÈ–ñ
+ * delta_reduc: Î´ç°¡ç´„
  *)
 let delta_reduc store tm =
   let d,args = flatten tm in
-    dtor_apply d store args
+  let f = get_dtor_fun d in
+    f store args
 
 (*
- * case_reduc: caseŠÈ–ñ
+ * case_reduc: caseç°¡ç´„
  * 
- * case c v1cvn of c1 -> t1 | c2 -> t2 | c | cm -> tm | ... -> t
- * ¨
- * - ti v1cvn    --- if c = c2
- * - t (c v1cvn) --- else
+ * case c v1â€¦vn of c1 -> t1 | c2 -> t2 | â€¦ | cm -> tm | ... -> t
+ * â†’
+ * - ti v1â€¦vn    --- if c = c2
+ * - t (c v1â€¦vn) --- else
  *)
 let case_reduc v cs =
   try
@@ -59,15 +60,15 @@ let binds_to_ctor bs = match bs with
   | bs -> TmTpl(List.map (fun b -> bind_to_ctor b) bs)
 
 let con_to_ctor c = match c with
-  | CInt n  -> cn_int n
-  | CReal r -> cn_rea r
-  | CStr s  -> cn_str s
-  | CSym s  -> cn_sym s
-  | CMem m  -> cn_mem m
+  | CnInt n -> cn_int n
+  | CnRea r -> cn_rea r
+  | CnStr s -> cn_str s
+  | CnSym s -> cn_sym s
 
 let rec term_to_ctor ctx tm = match tm with
   | TmVar x        -> tm_var x
   | TmCon c        -> tm_con (con_to_ctor c)
+  | TmMem m        -> tm_mem m
   | TmAbs(bs,tm)   -> tm_abs (binds_to_ctor bs) (term_to_ctor ctx tm)
   | TmApp(tm1,tm2) -> tm_app (term_to_ctor ctx tm1) (term_to_ctor ctx tm2)
   | TmLet(bs,tm1,tm2) ->
@@ -90,26 +91,25 @@ and bdtms_to_ctor ctx rcd = match rcd with
   | bdtms -> TmTpl(List.map (bdtm_to_ctor ctx) bdtms)
 
 let ctor_to_con c = match c with
-  | TmApp(TmCon(CSym "cn_int"),TmCon(CInt _ as n)) -> n
-  | TmApp(TmCon(CSym "cn_rea"),TmCon(CReal _ as r)) -> r
-  | TmApp(TmCon(CSym "cn_str"),TmCon(CStr _ as s)) -> s
-  | TmApp(TmCon(CSym "cn_sym"),TmCon(CSym _ as s)) -> s
-  | TmApp(TmCon(CSym "cn_mem"),TmCon(CInt _ as m)) -> m
+  | TmApp(TmCon(CnSym "cn_int"),TmCon(CnInt _ as n)) -> n
+  | TmApp(TmCon(CnSym "cn_rea"),TmCon(CnRea _ as r)) -> r
+  | TmApp(TmCon(CnSym "cn_str"),TmCon(CnStr _ as s)) -> s
+  | TmApp(TmCon(CnSym "cn_sym"),TmCon(CnSym _ as s)) -> s
   | _ -> raise(Ctor_parse "ctor_to_con")
 
 let ctor_to_bind b = match b with
-  | TmCon(CSym "bn_wild") -> Wild
-  | TmApp(TmCon(CSym "bn_eager"),TmCon(CStr x)) -> Eager x
-  | TmApp(TmCon(CSym "bn_lazy"),TmCon(CStr x)) -> Lazy x
+  | TmCon(CnSym "bn_wild") -> Wild
+  | TmApp(TmCon(CnSym "bn_eager"),TmCon(CnStr x)) -> Eager x
+  | TmApp(TmCon(CnSym "bn_lazy"),TmCon(CnStr x)) -> Lazy x
   | _ -> raise(Ctor_parse "ctor_to_bind")
 let ctor_to_binds bs = match bs with
   | TmTpl bs -> List.map ctor_to_bind bs
   | b -> [ctor_to_bind b]
 
 let rec ctor_to_case case = match case with
-  | TmApp(TmApp(TmCon(CSym "ca_pat"),c),t) ->
+  | TmApp(TmApp(TmCon(CnSym "ca_pat"),c),t) ->
       PatnCase(ctor_to_con c,ctor_to_term t)
-  | TmApp(TmCon(CSym "ca_dfl"),t) ->
+  | TmApp(TmCon(CnSym "ca_dfl"),t) ->
       DeflCase(ctor_to_term t)
   | _ -> raise(Ctor_parse "ctor_to_case")
 and ctor_to_cases cs = match cs with
@@ -123,55 +123,57 @@ and ctor_to_bdtms bdtms = match bdtms with
   | TmTpl[b;t] -> [ctor_to_bdtm bdtms]
   | _ -> raise(Ctor_parse "ctor_to_bdtms")
 and ctor_to_term tm = match tm with
-  | TmApp(TmCon(CSym "tm_var"),TmCon(CInt x)) -> TmVar x
-  | TmApp(TmCon(CSym "tm_con"),c) -> TmCon(ctor_to_con c)
-  | TmApp(TmCon(CSym "tm_abs"),TmTpl[bs;t]) ->
+  | TmApp(TmCon(CnSym "tm_var"),TmCon(CnInt x)) -> TmVar x
+  | TmApp(TmCon(CnSym "tm_con"),c) -> TmCon(ctor_to_con c)
+  | TmApp(TmCon(CnSym "tm_mem"),TmCon(CnInt m)) -> TmMem m
+  | TmApp(TmCon(CnSym "tm_abs"),TmTpl[bs;t]) ->
       TmAbs(ctor_to_binds bs,ctor_to_term tm)
-  | TmApp(TmCon(CSym "tm_app"),TmTpl[t1;t2]) ->
+  | TmApp(TmCon(CnSym "tm_app"),TmTpl[t1;t2]) ->
       TmApp(ctor_to_term t1,ctor_to_term t2)
-  | TmApp(TmCon(CSym "tm_let"),TmTpl[bs;t1;t2]) ->
+  | TmApp(TmCon(CnSym "tm_let"),TmTpl[bs;t1;t2]) ->
       TmLet(ctor_to_binds bs,ctor_to_term t1,ctor_to_term t2)
-  | TmApp(TmCon(CSym "tm_cas"),TmTpl[t;cs]) ->
+  | TmApp(TmCon(CnSym "tm_cas"),TmTpl[t;cs]) ->
       TmCas(ctor_to_term t,ctor_to_cases cs)
-  | TmApp(TmCon(CSym "tm_tpl"),TmTpl ts) ->
+  | TmApp(TmCon(CnSym "tm_tpl"),TmTpl ts) ->
       TmTpl(List.map ctor_to_term ts)
-  | TmApp(TmCon(CSym "tm_rcd"),rs) ->
+  | TmApp(TmCon(CnSym "tm_rcd"),rs) ->
       TmRcd(ctor_to_bdtms rs)
-  | TmApp(TmCon(CSym "tm_lbl"),TmTpl[t;TmCon(CStr l)]) ->
+  | TmApp(TmCon(CnSym "tm_lbl"),TmTpl[t;TmCon(CnStr l)]) ->
       TmLbl(ctor_to_term t,l)
-  | TmApp(TmCon(CSym "tm_quo"),t) ->
+  | TmApp(TmCon(CnSym "tm_quo"),t) ->
       TmQuo(ctor_to_term t)
   | _ -> Prims.tm_error "*** ctor_to_term ***"
 
 let _ = Prims.ctor_to_term_ref := ctor_to_term
 
+(** 1ã‚¹ãƒ†ãƒƒãƒ—ã®è©•ä¾¡ã‚’è¡Œã† *)
 (*
- * [\•¶]
+ * [æ§‹æ–‡]
  * 
- * v ::= x | m | \b1,c,bn.t | c v1cvn | v1,c,vn
+ * v ::= x | m | \b1,â€¦,bn.t | c v1â€¦vn | v1,â€¦,vn
  * t ::= t1 t 2
- *     | let b1,c,bn = t1 in t2
- *     | case t of c1 -> t1 | c | ... -> t
- *     | t1,c,tn
+ *     | let b1,â€¦,bn = t1 in t2
+ *     | case t of c1 -> t1 | â€¦ | ... -> t
+ *     | t1,â€¦,tn
  * b ::= x | \x | _
  * E ::= []
  *     | E t | (\x.t) E | (\_.t) E | (\bs.t) T
- *     | case E of c1 -> t1 | c | ... -> t
- *     | (v1,c,Ei,c,tn)
+ *     | case E of c1 -> t1 | â€¦ | ... -> t
+ *     | (v1,â€¦,Ei,â€¦,tn)
  * T ::= []
  *     | E t | (\x.t) E | (\_.t) E | (\bs.t) T
- *     | case E of c1 -> t1 | c | ... -> t
+ *     | case E of c1 -> t1 | â€¦ | ... -> t
  * 
- * [let‚Ì•ÏŠ·]
- * let b1,c,bn = t1 in t2 Ë (\b1,c,bn.t2) t1
+ * [letã®å¤‰æ›]
+ * let b1,â€¦,bn = t1 in t2 â‡’ (\b1,â€¦,bn.t2) t1
  * 
- * [tuple“K—p‚Ì•ÏŠ·]
- * (\b1,c,bn.t) (t1,c,tn) Ë ((c(((\b1.(\b2.(c.(\bn.t)c))) t1) t2)c) tn)
+ * [tupleé©ç”¨ã®å¤‰æ›]
+ * (\b1,â€¦,bn.t) (t1,â€¦,tn) â‡’ ((â€¦(((\b1.(\b2.(â€¦.(\bn.t)â€¦))) t1) t2)â€¦) tn)
  * 
- * [ƒÀŠÈ–ñ‹K‘¥]
- * (\_.t) v ¨ v
- * (\x.t) v ¨ t[x:=v]
- * (\\x.t) t' ¨ t[x:=t']
+ * [Î²ç°¡ç´„è¦å‰‡]
+ * (\_.t) v â†’ v
+ * (\x.t) v â†’ t[x:=v]
+ * (\\x.t) t' â†’ t[x:=t']
  * 
  *)
 let rec eval_step ctx store tm = match tm with
@@ -233,6 +235,7 @@ let rec eval_step ctx store tm = match tm with
   | TmQuo(t1) -> term_to_ctor ctx t1
   | _ -> tm_error "*** no eval rule ***"
 
+(** é …ãŒçµ„ã«ãªã‚‹ã¾ã§è©•ä¾¡ã‚’è¡Œã† *)
 let eval_tuple ctx store tm =
   let rec iter tm = match tm with
     | TmTpl _ -> tm
@@ -241,6 +244,7 @@ let eval_tuple ctx store tm =
   in
     iter tm
 
+(** é …ãŒå€¤ã«ãªã‚‹ã¾ã§è©•ä¾¡ã‚’è¡Œã† *)
 let eval ctx store tm =
   let rec iter tm =
     if is_value tm then

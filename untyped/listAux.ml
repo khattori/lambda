@@ -1,15 +1,11 @@
-(*
- * listAux.ml: ƒŠƒXƒg‘€ì‚Ì‚½‚ß‚Ì•â•ŠÖ”’è‹`
- *)
+(** ãƒªã‚¹ãƒˆæ“ä½œã®ãŸã‚ã®è£œåŠ©é–¢æ•°å®šç¾© *)
 
 module List =
 struct
   include List
 
-(*
- * filter_map: ('a -> 'b option) -> 'a list -> 'b list
- *   -- ƒŠƒXƒg‚ÌƒtƒBƒ‹ƒ^[‚ÆŽÊ‘œ‚ð“¯Žž‚És‚¤
- *)
+(** ãƒªã‚¹ãƒˆã®ãƒ•ã‚£ãƒ«ã‚¿ãƒ¼ã¨å†™åƒã‚’åŒæ™‚ã«è¡Œã† *)
+(* filter_map: ('a -> 'b option) -> 'a list -> 'b list *)
 let filter_map f xs =
   let rec iter acc = function
     | [] -> rev acc
@@ -17,10 +13,8 @@ let filter_map f xs =
   in
     iter [] xs
 
-(*
- * has_dup: 'a list -> bool
- *   -- ƒŠƒXƒg‚ªd•¡‚µ‚½—v‘f‚ðŽ‚Á‚Ä‚¢‚é‚©’²‚×‚é
- *)
+(** ãƒªã‚¹ãƒˆãŒé‡è¤‡ã—ãŸè¦ç´ ã‚’æŒã£ã¦ã„ã‚‹ã‹èª¿ã¹ã‚‹ *)
+(* has_dup: 'a list -> bool *)
 let has_dup xs =
   let rec iter = function
     | [] -> false
@@ -28,10 +22,8 @@ let has_dup xs =
   in
     iter xs
 
-(*
- * check_dup: ('a -> unit) -> 'a list -> unit
- *   -- ƒŠƒXƒg‚ªd•¡‚µ‚½—v‘f‚ðŽ‚Á‚Ä‚¢‚é‚©ƒ`ƒFƒbƒN‚·‚é
- *)
+(** ãƒªã‚¹ãƒˆãŒé‡è¤‡ã—ãŸè¦ç´ ã‚’æŒã£ã¦ã„ã‚‹ã‹ãƒã‚§ãƒƒã‚¯ã™ã‚‹ *)
+(* check_dup: ('a -> unit) -> 'a list -> unit *)
 let check_dup f xs =
   let rec iter = function
     | [] -> ()

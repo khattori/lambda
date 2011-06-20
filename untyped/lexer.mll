@@ -1,5 +1,5 @@
 (*
-  lexer.mll: Žš‹å’è‹`
+  lexer.mll: å­—å¥å®šç¾©
 *)
 {
   open Parser
@@ -55,7 +55,7 @@ rule token = parse
           if List.mem_assoc s keyword_table then
             List.assoc s keyword_table
           else if Const.is_symbol s then
-            CONST(Const.CSym s)
+            CONST(Const.CnSym s)
           else
             IDENT s
       }
@@ -67,13 +67,13 @@ rule token = parse
       {
         let s = lexeme lexbuf in
           if Const.is_symbol s then
-            CONST(Const.CSym s)
+            CONST(Const.CnSym s)
           else
             IDENT s
       }
-  | num { CONST(Const.CInt(int_of_string(lexeme lexbuf))) }
+  | num { CONST(Const.CnInt(int_of_string(lexeme lexbuf))) }
   | "\\" { BACKSLASH }
-  (* ƒZƒpƒŒ[ƒ^ *)
+  (* ã‚»ãƒ‘ãƒ¬ãƒ¼ã‚¿ *)
   | "(" { LPAREN }
   | ")" { RPAREN }
   | "{" { LBRACE }
@@ -83,15 +83,15 @@ rule token = parse
   | "." { DOT }
   | "," { COMMA }
   | float_literal
-      { CONST(Const.CReal(float_of_string(lexeme lexbuf))) }
+      { CONST(Const.CnRea(float_of_string(lexeme lexbuf))) }
   | ";" { SEMI }
   | '"'
-      { CONST(Const.CStr(string (Buffer.create 0) lexbuf)) }
+      { CONST(Const.CnStr(string (Buffer.create 0) lexbuf)) }
   | eof
       { EOF }
   | _ as c
       { raise (Illegal_character c) }
-(* •¶Žš—ñƒŠƒeƒ‰ƒ‹‚Ìˆ— *)
+(* æ–‡å­—åˆ—ãƒªãƒ†ãƒ©ãƒ«ã®å‡¦ç† *)
 and string strbuf = parse
   | '"'
       { Buffer.contents strbuf }
@@ -105,7 +105,7 @@ and string strbuf = parse
       { raise Unterminated_string }
   | _ as c
       { Buffer.add_char strbuf c; string strbuf lexbuf }
-(* ƒGƒXƒP[ƒv•¶Žš‚Ìˆ— *)
+(* ã‚¨ã‚¹ã‚±ãƒ¼ãƒ—æ–‡å­—ã®å‡¦ç† *)
 and escaped = parse
   | 'a'  { '\007' }
   | 'b'  { '\b' }

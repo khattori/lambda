@@ -1,29 +1,32 @@
 (**
-   Absyn: ’ŠÛ\•¶–Ø’è‹`
+   Absyn: æŠ½è±¡æ§‹æ–‡æœ¨å®šç¾©
 *)
 open ListAux
 open Printf
 open Context
+open Const
 
 exception Parse_error
 exception Multiple_labels of string
 
-(* €‚Ì’è‹` *)
+(** é …ã®å®šç¾© *)
 (*
-  E ::= x (¸ Ident)
-      | c (¸ Const)
+  E ::= x (âˆˆ Ident)
+      | c (âˆˆ Const)
+      | m (âˆˆ Address)
       | \B.E
       | E1 E2
       | let B = E1 in E2
       | case E of c1 -> E1 | ... -> En
-      | E1,...,En                         --- ƒ^ƒvƒ‹
-      | { b1 = E1; ...; bn = En }         --- ƒŒƒR[ƒh
-      | E.l                               --- —v‘fQÆ 
-  b ::= l | \l | _     l (¸ Label) 
+      | E1,...,En                         --- ã‚¿ãƒ—ãƒ«
+      | { b1 = E1; ...; bn = En }         --- ãƒ¬ã‚³ãƒ¼ãƒ‰
+      | E.l                               --- è¦ç´ å‚ç…§ 
+  b ::= l | \l | _     l (âˆˆ Label) 
   B ::= x | \x | _ | B,B 
 *)
 type term =
   | TmVar of int
+  | TmMem of int
   | TmCon of Const.t
   | TmAbs of binder list * term
   | TmApp of term * term
@@ -40,16 +43,20 @@ and command =
   | Data of string * int
   | Noop
 
+(** é …ãŒãƒªã‚¹ãƒˆã‹ã©ã†ã‹åˆ¤å®š *)
 let rec is_list tm = match tm with
-  | TmCon(Const.CSym "nil") -> true
-  | TmApp(TmCon(Const.CSym "cons"),TmTpl[_;t]) -> is_list t
+  | TmCon(CnSym "nil") -> true
+  | TmApp(TmCon(CnSym "cons"),TmTpl[_;t]) -> is_list t
   | _ -> false
+
+(** é …ã‚’æ–‡å­—åˆ—ã«å¤‰æ›ã™ã‚‹ *)
 let rec to_string ctx tm =
   match tm with
     | TmVar x -> Context.index2name ctx x
     | tm when is_list tm ->
         sprintf "[%s]" (String.concat "; " (to_string_list ctx tm))
     | TmCon c -> Const.to_string c
+    | TmMem m -> sprintf "<%d>" m
     | TmAbs(bs,tm) ->
         let ctx',s = to_string_binders ctx bs in
           sprintf "(\\%s.%s)" s (to_string ctx' tm)
@@ -73,8 +80,8 @@ let rec to_string ctx tm =
     | TmQuo tm ->
         sprintf "quote(%s)" (to_string ctx tm)
 and to_string_list ctx ts = match ts with
-  | TmCon(Const.CSym "nil") -> []
-  | TmApp(TmCon(Const.CSym "cons"),TmTpl[t;ts]) ->
+  | TmCon(CnSym "nil") -> []
+  | TmApp(TmCon(CnSym "cons"),TmTpl[t;ts]) ->
       to_string ctx t::to_string_list ctx ts
   | _ -> assert false
 and to_string_case ctx case = match case with
@@ -96,14 +103,14 @@ and to_string_binders ctx bs =
     ctx',String.concat "," (List.rev ss)
 
 (*
- * print: ’ŠÛ\•¶–Ø‚Ìo—Í
+ * print: æŠ½è±¡æ§‹æ–‡æœ¨ã®å‡ºåŠ›
  *)
 let rec print ctx tm =
   print_string (to_string ctx tm)
 
 (* De Bruijin index *)
 (*
- * map: €’uŠ·‚Ì‚½‚ß‚Ì•â•ŠÖ”
+ * map: é …ç½®æ›ã®ãŸã‚ã®è£œåŠ©é–¢æ•°
  *
  *)
 let term_map onvar t =
@@ -121,18 +128,18 @@ let term_map onvar t =
     | TmRcd(bs)       -> TmRcd(List.map (fun (b,t) -> b,walk c t) bs)
     | TmLbl(t1,l)     -> TmLbl(walk c t1,l)
     | TmQuo(t1)       -> TmQuo(walk c t1)
-    | con             -> con
+    | other           -> other
   in
     walk 0 t
 
 (*
- * shift: ƒVƒtƒg‘€ì
+ * shift: ã‚·ãƒ•ãƒˆæ“ä½œ
  * 
- *   ªd,c(k)                = k          --- if k < c
+ *   â†‘d,c(k)                = k          --- if k < c
  *                             k + d      --- if k >= c
- *   ªd,c(\.t1)             = \.ªd,c+1(t1)
- *   ªd,c(t1 t2)            = ªd,c(t1) ªd,c(t2)
- *   ªd,c(let x = t1 in t2) = let x = ªd,c(t1) in ªd,c+1(t2)
+ *   â†‘d,c(\.t1)             = \.â†‘d,c+1(t1)
+ *   â†‘d,c(t1 t2)            = â†‘d,c(t1) â†‘d,c(t2)
+ *   â†‘d,c(let x = t1 in t2) = let x = â†‘d,c(t1) in â†‘d,c+1(t2)
  * 
  *)
 let term_shift d t =
@@ -141,15 +148,15 @@ let term_shift d t =
     t
 
 (*
- * subst: ’uŠ·‘€ì
+ * subst: ç½®æ›æ“ä½œ
  * 
  *   [j:->s]k                  = s     --- if k = j
  *                               k     --- else
- *   [j:->s]\.t1               = \.[j+1:->ª1,0(s)]t1
+ *   [j:->s]\.t1               = \.[j+1:->â†‘1,0(s)]t1
  *   [j:->s](t1 t2)            = [j:->s]t1 [j:->s]t2
- *   [j:->s](let x = t1 in t2) = let x = [j:->s]t1 in [j+1:->ª1,0(s)]t2
+ *   [j:->s](let x = t1 in t2) = let x = [j:->s]t1 in [j+1:->â†‘1,0(s)]t2
  * 
- * ˆÈ‰º‚ÌÀ‘•‚Å‚ÍCshift‘€ì‚ğˆê‹C‚É‚â‚Á‚Ä‚¢‚é
+ * ä»¥ä¸‹ã®å®Ÿè£…ã§ã¯ï¼Œshiftæ“ä½œã‚’ä¸€æ°—ã«ã‚„ã£ã¦ã„ã‚‹
  *)
 let term_subst j s t =
   term_map
@@ -157,9 +164,9 @@ let term_subst j s t =
     t
 
 (*
- * subst_top: ƒÀŠÈ–ñ‚É‚¨‚¯‚é’uŠ·
+ * subst_top: Î²ç°¡ç´„ã«ãŠã‘ã‚‹ç½®æ›
  * 
- *   (\x.t1) t2 ¨ ª-1,0([0:->ª1,0(t2)]t1)
+ *   (\x.t1) t2 â†’ â†‘-1,0([0:->â†‘1,0(t2)]t1)
  *
  *)
 (*
@@ -167,13 +174,13 @@ let term_subst_top t1 t2 =
   term_shift (-1) (term_subst 0 (term_shift 1 t2) t1)
 *)
 (*
- * (\x.t1) t2 ¨ ƒĞ0(t1,t2)
+ * (\x.t1) t2 â†’ Ïƒ0(t1,t2)
  * 
- * ƒĞn(m,t)     = m        if m < n
- * ƒĞn(n,t)     = ªn,0(t)
- * ƒĞn(m,t)     = m-1      if m > n
- * ƒĞn(\.t',t)  = \.ƒĞn+1(t',t)
- * ƒĞn(t1 t2,t) = ƒĞn(t1,t) ƒĞn(t2,t)
+ * Ïƒn(m,t)     = m        if m < n
+ * Ïƒn(n,t)     = â†‘n,0(t)
+ * Ïƒn(m,t)     = m-1      if m > n
+ * Ïƒn(\.t',t)  = \.Ïƒn+1(t',t)
+ * Ïƒn(t1 t2,t) = Ïƒn(t1,t) Ïƒn(t2,t)
  *)
 let term_subst_top t1 t2 =
   term_map
@@ -184,7 +191,7 @@ let term_subst_top t1 t2 =
     t1
 
 (*
- * is_value: €‚ª’l‚©‚Ç‚¤‚©”»’è
+ * is_value: é …ãŒå€¤ã‹ã©ã†ã‹åˆ¤å®š
  * 
  *)
 let rec is_value tm =
@@ -200,11 +207,14 @@ let rec is_value tm =
             -> 0
       | TmCon(c) when Const.is_ctor c -> Const.arity c
       | TmCon(c) when Const.is_dtor c -> Const.arity c - 1
-      | TmCon _ | TmAbs _ -> 0
+      | TmMem _ | TmCon _ | TmAbs _ -> 0
       | _ -> -1
   in
     walk tm >= 0
 
+(*
+ * check_value: é …ã®æ±ç”¨åˆ¤å®šé–¢æ•°
+ *)
 let check_value oncon tm =
   let rec walk tm =
     match tm with
@@ -215,19 +225,19 @@ let check_value oncon tm =
     walk tm == 0
 
 (*
- * is_dtor_value: €‚ªƒfƒXƒgƒ‰ƒNƒ^‚©‚Ç‚¤‚©”»’è
+ * is_dtor_value: é …ãŒãƒ‡ã‚¹ãƒˆãƒ©ã‚¯ã‚¿ã‹ã©ã†ã‹åˆ¤å®š
  *)
 let is_dtor_value tm =
   check_value Const.is_dtor tm
 
 (*
- * is_ctor_value: €‚ªƒRƒ“ƒXƒgƒ‰ƒNƒ^‚©‚Ç‚¤‚©”»’è
+ * is_ctor_value: é …ãŒã‚³ãƒ³ã‚¹ãƒˆãƒ©ã‚¯ã‚¿ã‹ã©ã†ã‹åˆ¤å®š
  *)
 let is_ctor_value tm =
   check_value Const.is_ctor tm
 
 (*
- * check_record: ƒŒƒR[ƒh‚É“¯ˆêƒ‰ƒxƒ‹–¼‚ªŠÜ‚Ü‚ê‚Ä‚¢‚é‚©”»’è
+ * check_record: ãƒ¬ã‚³ãƒ¼ãƒ‰ã«åŒä¸€ãƒ©ãƒ™ãƒ«åãŒå«ã¾ã‚Œã¦ã„ã‚‹ã‹åˆ¤å®š
  *)
 let check_record rcd =
   let xs = List.filter_map (

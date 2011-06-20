@@ -1,12 +1,12 @@
-/* parser.mly: 構文定義 */
+/* parser.mly: 讒区枚螳夂ｾｩ */
 %{
   open Absyn
   open Context
 %}
 
-/* トークン */
+/* 繝医�ｼ繧ｯ繝ｳ */
 %token EOF
-/* キーワードトークン */
+/* 繧ｭ繝ｼ繝ｯ繝ｼ繝峨ヨ繝ｼ繧ｯ繝ｳ */
 %token IN
 %token LET
 %token DEF
@@ -48,7 +48,7 @@
 %type <Absyn.term Context.t -> Absyn.command> toplevel
 %%
 
-/* トップレベル */
+/* 繝医ャ繝励Ξ繝吶Ν */
 toplevel
   : command SEMI { $1 }
   | error SEMI   { raise Absyn.Parse_error }
