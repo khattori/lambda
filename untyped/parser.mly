@@ -14,6 +14,7 @@
 %token CASE
 %token OF
 %token QUOTE
+%token UNQUO
 %token RARROW
 %token DDDOT
 %token DOT
@@ -44,24 +45,44 @@
 %nonassoc DOT
 
 
-%start toplevel
+%start main toplevel
+%type <Absyn.term Context.t -> Absyn.command list> main
 %type <Absyn.term Context.t -> Absyn.command> toplevel
 %%
 
-/* トップレベル */
+/* バッチモード時のメイン */
+main
+  : command_list EOF { fun ctx ->
+                         let cmds,_ = $1 ctx in
+                           List.rev cmds           }
+  | error        { raise Absyn.Parse_error }
+;
+
+/* 対話モード時のトップレベル */
 toplevel
-  : command SEMI { $1 }
+  : command SEMI { fun ctx -> fst($1 ctx)  }
   | error SEMI   { raise Absyn.Parse_error }
-  | EOF          { raise End_of_file }
+  | EOF          { raise End_of_file       }
 ;
+
 command
-  : expression                     { fun ctx -> Eval($1 ctx) }
-  | DEF binder_list EQ expression  { fun ctx ->
-                                       let bs,_ = $2 ctx in
-                                         Defn(bs,$4 ctx)     }
-  | DATA IDENT arity_option        { fun ctx -> Data($2,$3)  }
-  | /* empty */                    { fun ctx -> Noop         }
+  : expression                    { fun ctx -> Eval($1 ctx),ctx  }
+  | DEF binder_list EQ expression { fun ctx ->
+                                      let bs,ctx' = $2 ctx in
+                                        Defn(bs,$4 ctx),ctx'     }
+  | DATA IDENT arity_option       { fun ctx -> Data($2,$3),ctx   }
+  | /* empty */                   { fun ctx -> Noop,ctx          }
 ;
+command_list
+  : command                       { fun ctx ->
+                                      let cmd,ctx' = $1 ctx in
+                                        [cmd],ctx'               }
+  | command_list SEMI command     { fun ctx ->
+                                      let cmds,ctx' = $1 ctx in
+                                      let cmd,ctx'' = $3 ctx' in
+                                        cmd::cmds,ctx''          }
+;
+
 arity_option
   : /* empty */  { 0 }
   | ARITY        { $1 }
@@ -103,6 +124,9 @@ expression
     }
   | QUOTE atomic_expression {
       fun ctx -> TmQuo($2 ctx)
+    }
+  | UNQUO atomic_expression {
+      fun ctx -> TmUnq($2 ctx)
     }
 ;
 

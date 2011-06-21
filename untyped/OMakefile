@@ -42,6 +42,7 @@ FILES[] =
 	error
 	listAux
 	main
+	meta
 	prims
 	store
 	lexer

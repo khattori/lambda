@@ -36,6 +36,7 @@ type term =
   | TmRcd of (binder * term) list
   | TmLbl of term * string
   | TmQuo of term
+  | TmUnq of term
 and case = PatnCase of Const.t * term | DeflCase of term
 and command =
   | Defn of binder list * term
@@ -52,7 +53,8 @@ let rec is_list tm = match tm with
 (** 項を文字列に変換する *)
 let rec to_string ctx tm =
   match tm with
-    | TmVar x -> Context.index2name ctx x
+    | TmVar x ->
+        sprintf "%s(%d)" (Context.index2name ctx x) x
     | tm when is_list tm ->
         sprintf "[%s]" (String.concat "; " (to_string_list ctx tm))
     | TmCon c -> Const.to_string c
@@ -79,6 +81,8 @@ let rec to_string ctx tm =
           (String.concat "; " (List.map (to_string_binding ctx) rcd))
     | TmQuo tm ->
         sprintf "quote(%s)" (to_string ctx tm)
+    | TmUnq tm ->
+        sprintf "unquo(%s)" (to_string ctx tm)
 and to_string_list ctx ts = match ts with
   | TmCon(CnSym "nil") -> []
   | TmApp(TmCon(CnSym "cons"),TmTpl[t;ts]) ->
@@ -116,7 +120,7 @@ let rec print ctx tm =
 let term_map onvar t =
   let rec walk c t = match t with
     | TmVar x         -> onvar c x
-    | TmAbs(bs,t1)    -> TmAbs(bs,walk (c + 1) t1)
+    | TmAbs(bs,t1)    -> TmAbs(bs,walk (c + (List.length bs)) t1)
     | TmApp(t1,t2)    -> TmApp(walk c t1,walk c t2)
     | TmLet(bs,t1,t2) -> TmLet(bs,walk c t1, walk (c + (List.length bs)) t2)
     | TmCas(t1,cs)    ->
@@ -128,6 +132,7 @@ let term_map onvar t =
     | TmRcd(bs)       -> TmRcd(List.map (fun (b,t) -> b,walk c t) bs)
     | TmLbl(t1,l)     -> TmLbl(walk c t1,l)
     | TmQuo(t1)       -> TmQuo(walk c t1)
+    | TmUnq(t1)       -> TmUnq(walk c t1)
     | other           -> other
   in
     walk 0 t

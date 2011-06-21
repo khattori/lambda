@@ -17,8 +17,16 @@
     ( "case",  CASE  );
     ( "of",    OF    );
     ( "quote", QUOTE );
+    ( "unquo", UNQUO );
   ]
 
+  let init lexbuf fname =
+    lexbuf.lex_curr_p <- {
+      pos_fname = fname;
+      pos_lnum = 1;
+      pos_bol = 0;
+      pos_cnum = 0;
+    }
 }
 
 let space = [' ' '\t']
@@ -26,6 +34,7 @@ let blank = space | ['\011'(* \v *) '\012'(* \f *)]
 let cr = '\r'
 let lf = '\n'
 let newline = cr | lf | cr lf
+let nonnl = [^ '\r' '\n']
 
 let alpha = ['a'-'z' 'A'-'Z']
 let nonzero_digit = ['1'-'9']
@@ -42,12 +51,9 @@ let operator_char =
   ['!' '$' '%' '&' '*' '+' '-' '/' ':' '<' '=' '>' '?' '@' '^' '|' '~']
 
 rule token = parse
-  | blank+
-      { token lexbuf }
-  | newline
-      { token lexbuf }
-  | "_"
-      { WILDCARD }
+  | blank+  { token lexbuf }
+  | newline { new_line lexbuf; token lexbuf }
+  | "_"     { WILDCARD }
   | "/" (num as n) { ARITY(int_of_string n) }
   | ident_char_head ident_char*
       {
@@ -60,9 +66,11 @@ rule token = parse
             IDENT s
       }
   | "..." { DDDOT }
-  | "=" { EQ }
-  | "->" { RARROW }
-  | "|" { VBAR }
+  | "="   { EQ }
+  | "->"  { RARROW }
+  | "|"   { VBAR }
+  | "#" nonnl* newline
+      { new_line lexbuf; token lexbuf }
   | operator_char+
       {
         let s = lexeme lexbuf in
@@ -71,26 +79,23 @@ rule token = parse
           else
             IDENT s
       }
-  | num { CONST(Const.CnInt(int_of_string(lexeme lexbuf))) }
+  | num  { CONST(Const.CnInt(int_of_string(lexeme lexbuf))) }
   | "\\" { BACKSLASH }
   (* セパレータ *)
-  | "(" { LPAREN }
-  | ")" { RPAREN }
-  | "{" { LBRACE }
-  | "}" { RBRACE }
-  | "[" { LBRACKET }
-  | "]" { RBRACKET }
-  | "." { DOT }
-  | "," { COMMA }
+  | "("  { LPAREN }
+  | ")"  { RPAREN }
+  | "{"  { LBRACE }
+  | "}"  { RBRACE }
+  | "["  { LBRACKET }
+  | "]"  { RBRACKET }
+  | "."  { DOT }
+  | ","  { COMMA }
   | float_literal
       { CONST(Const.CnRea(float_of_string(lexeme lexbuf))) }
-  | ";" { SEMI }
-  | '"'
-      { CONST(Const.CnStr(string (Buffer.create 0) lexbuf)) }
-  | eof
-      { EOF }
-  | _ as c
-      { raise (Illegal_character c) }
+  | ";"  { SEMI }
+  | '"'  { CONST(Const.CnStr(string (Buffer.create 0) lexbuf)) }
+  | eof  { EOF }
+  | _ as c { raise (Illegal_character c) }
 (* 文字列リテラルの処理 *)
 and string strbuf = parse
   | '"'

@@ -69,11 +69,6 @@ let is_const_ store cs = match cs with
   | [c] when is_ctor_value c -> TmCon(CnSym "true")
   | _ -> TmCon(CnSym "false")
 
-let ctor_to_term_ref = ref (fun (x:Absyn.term) -> x)
-let unquo_ store cs = match cs with
-  | [v] -> !ctor_to_term_ref v
-  | _ -> assert false
-
 (*
  * fix v => v (fix v)
  *)
@@ -108,6 +103,7 @@ let ctor_table = [
   ( "tm_rcd", 1); (* | TmRcd of (binder * term) list *)
   ( "tm_lbl", 1); (* | TmLbl of term * string *)
   ( "tm_quo", 1); (* | TmQuo of term *)
+  ( "tm_unq", 1); (* | TmUnq of term *)
   (* and case = PatnCase of Const.t * term | DeflCase of term *)
   ( "ca_pat", 1);
   ( "ca_dfl", 1);
@@ -141,7 +137,7 @@ let cn_rea r = TmApp(sym "cn_rea",TmCon(CnRea r))
 let cn_str s = TmApp(sym "cn_str",TmCon(CnStr s))
 let cn_sym s = TmApp(sym "cn_sym",sym s)
 
-let tm_var x        = TmApp(sym "tm_var",TmCon(CnInt x))
+let tm_var x        = TmApp(sym "tm_var",TmCon(CnStr x))
 let tm_con c        = TmApp(sym "tm_con",c)
 let tm_mem m        = TmApp(sym "cn_mem",TmCon(CnInt m))
 let tm_abs bs t     = TmApp(sym "tm_abs",TmTpl[bs;t])
@@ -152,6 +148,7 @@ let tm_tpl ts       = TmApp(sym "tm_tpl",ts)
 let tm_rcd rs       = TmApp(sym "tm_rcd",rs)
 let tm_lbl t l      = TmApp(sym "tm_lbl",TmTpl[t;TmCon(CnStr l)])
 let tm_quo t        = TmApp(sym "tm_quo",t)
+let tm_unq t        = TmApp(sym "tm_unq",t)
 
 let dtor_table = [
   ( "iadd_", (2, iadd_)  );
@@ -166,7 +163,6 @@ let dtor_table = [
   ( "beq",   (4, beq_)   );
   ( "is_const_",(1,is_const_));
 (*  ( "fix",   (1, fix_)   ); *)
-  ( "unquo", (1, unquo_)  );
   ( "exit",  (0, exit_)  );
   ( "error", (1, error_) );
 ]
@@ -181,32 +177,3 @@ let _ =
   List.iter (fun (s,arity)     -> Const.add_ctor s arity) ctor_table;
   List.iter (fun (s,(arity,_)) -> Const.add_dtor s arity) dtor_table
 
-(*
-def if    = \b.\\t1.\\t2.case b of true -> t1
-                                 | false -> t2
-                                 | ... -> (\x.error "if: type mismatch");
-def ==    = \t1.\t2.beq t1 t2 true false;
-def not   = \t.== t false;
-def andalso = \t1.\\t2.if t1 t2 false;
-def orelse  = \t1.\\t2.if t1 true t2;
-def !=    = \t1.\t2.beq t1 t2 false true;
-def >     = \t1.\t2.igt_ t1 t2 true false;
-def >=    = \t1.\t2.orelse (> t1 t2) (== t1 t2);
-def <     = \t1.\t2.igt_ t2 t1 true false;
-def <=    = \t1.\t2.orelse (< t1 t2) (== t1 t2);
-def min   = \t1.\t2.if (<= t1 t2) t1 t2;
-def max   = \t1.\t2.if (>= t1 t2) t1 t2;
-def fix   = \f.(\x.f (x x)) (\x.f (x x));
-def fact  = fix (\\fact.\n.if (== n 0) 1 ( imul_ n (fact (isub_ n 1))));
-
-def maxv = fix (\\maxv.\x.\y.if (== y nil) x (if (> x y) (maxv x) (maxv y)));
-def minv = fix (\\minv.\x.\y.if (== y nil) x (if (> x y) (minv y) (minv x)));
-
-def even,odd =
-  let evenodd =
-     fix (\\eo.:: (\n.if (== n 0) true (tl eo (isub_ n 1)))
-                          (\n.if (== n 0) false (hd eo (isub_ n 1))))
-  in 
-    hd evenodd,tl evenodd;
-
-*)
