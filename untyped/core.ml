@@ -5,30 +5,24 @@ open Context
 open Prims
 
 exception Return_term of term
-(*
- * (...((C t1) t2) ... tn)を
- *    C,[t1;t2;...;tn]の形にする
+
+
+(* 
+ * make_apps: 入れ子になったλ適用の項を作る
+ * 
+ * E E1...En を ((...((E E1) E2) ...) En)に変換
+ * 
  *)
-let flatten tm =
-  let rec iter tm args = match tm with
-    | TmCon c -> c,args
-    | TmApp(tm1,tm2) -> iter tm1 (tm2::args)
-    | _ -> assert false
-  in
-    iter tm []
-(* flattenと逆 *)
-let rec apply tm tms =
+let rec make_apps tm tms =
   match tms with
     | [] -> tm
-    | tm'::tms' -> apply (TmApp(tm,tm')) tms'
+    | tm'::tms' -> make_apps (TmApp(tm,tm')) tms'
 
 (*
  * delta_reduc: δ簡約
  *)
-let delta_reduc store tm =
-  let d,args = flatten tm in
-  let f = get_dtor_fun d in
-    f store args
+let delta_reduc store d vs =
+  (get_dtor_fun d) store vs
 
 (*
  * case_reduc: case簡約
@@ -39,17 +33,20 @@ let delta_reduc store tm =
  * - t (c v1…vn) --- else
  *)
 let case_reduc v cs =
-  try
-    let c,vs = flatten v in
+  let find_case c vs =
+    try
       List.iter (
         function
-          | PatnCase(c',tm) when c = c' -> raise (Return_term(apply tm vs))
+          | PatnCase(c',tm) when c = c' -> raise (Return_term(make_apps tm vs))
           | DeflCase tm -> raise (Return_term(TmApp(tm,v)))
           | _ -> ()
       ) cs;
       (tm_error "*** no match case ***")
-  with Return_term tm -> tm
-
+    with Return_term tm -> tm
+  in
+    match v with
+      | TmCon(c,vs) when Const.arity c == List.length vs -> find_case c vs
+      | _ -> Prims.tm_error "*** invalid case value ***"
 
 (** 1ステップの評価を行う *)
 (*
@@ -82,9 +79,11 @@ let case_reduc v cs =
  * 
  *)
 let rec eval_step ctx store tm =
-(* Printf.printf "---> %s\n" (Absyn.to_string ctx tm); *)
   match tm with
-  | tm when is_value tm -> Prims.tm_error "*** no eval rule ***"
+  | tm when is_value tm ->
+      Prims.tm_error "*** no eval rule ***"
+  | TmCon(CnSym d,vs) ->
+      delta_reduc store d vs
   | TmLet(bs,tm1,tm2) ->
       TmApp(TmAbs(bs,tm2),tm1)
   | TmApp(TmAbs([(Eager _|Wild) as b],tm2),tm1) ->
@@ -103,8 +102,11 @@ let rec eval_step ctx store tm =
         Prims.tm_error "*** tuple mismatch ***"
   | TmApp(TmAbs(bs,tm2),tm1) ->
       TmApp(TmAbs(bs,tm2),eval_step ctx store tm1)
-  | tm when is_dtor_value tm ->
-      delta_reduc store tm
+  | TmApp(TmCon(c,vs),tm1) when is_value tm1 ->
+      if Const.arity c > List.length vs then
+        TmCon(c,vs@[tm1])
+      else
+        Prims.tm_error "*** no eval rule ***"
   | TmApp(tm1,tm2) ->
       if is_value tm1 then
         TmApp(tm1,eval_step ctx store tm2)
@@ -113,7 +115,7 @@ let rec eval_step ctx store tm =
   | TmVar x ->
       let tm',o = Context.get_term ctx x in
         term_shift (x + o) tm'
-  | TmCas(tm1,cs) when is_ctor_value tm1 ->
+  | TmCas(tm1,cs) when is_value tm1 ->
       case_reduc tm1 cs
   | TmCas(tm1,cs) ->
       TmCas(eval_step ctx store tm1,cs)
@@ -145,20 +147,26 @@ let rec eval_step ctx store tm =
       Meta.ctor_to_term ctx t1
   | TmUnq(t1) ->
       TmUnq(eval_step ctx store t1)
-  | _ -> tm_error "*** no eval rule ***"
+  | _ -> Prims.tm_error "*** no eval rule ***"
 
 (** 項が組になるまで評価を行う *)
 let eval_tuple ctx store tm =
-  let rec iter tm = match tm with
-    | TmTpl _ -> tm
-    | tm when is_value tm -> tm
-    | _ -> iter (eval_step ctx store tm)
+  let rec iter tm =
+(*    Printf.printf "---> %s\n" (Absyn.to_string ctx tm); *)
+    match tm with
+      | TmTpl _ -> tm
+      | tm ->
+          if is_value tm then
+            tm
+          else
+            iter (eval_step ctx store tm)
   in
     iter tm
 
 (** 項が値になるまで評価を行う *)
 let eval ctx store tm =
   let rec iter tm =
+(*    Printf.printf "---> %s\n" (Absyn.to_string ctx tm); *)
     if is_value tm then
       tm
     else

@@ -4,8 +4,8 @@ def if    = \b.\\t1.\\t2.case b of true -> t1
                                  | false -> t2
                                  | ... -> (\x.error "if: type mismatch");
 
-def hd    = \ls.case ls of cons -> \x,_.x;
-def tl    = \ls.case ls of cons -> \_,y.y;
+def hd    = \ls.case ls of cons -> \x.\_.x;
+def tl    = \ls.case ls of cons -> \_.\y.y;
 
 def ==    = \t1.\t2.beq t1 t2 true false;
 def not   = \t.== t false;
@@ -26,8 +26,9 @@ def minv = fix (\\minv.\x.\y.if (== y nil) x (if (> x y) (minv y) (minv x)));
 
 def even,odd =
   let evenodd =
-     fix (\\eo.cons ((\n.if (== n 0) true  (tl eo (isub_ n 1))),
-                     (\n.if (== n 0) false (hd eo (isub_ n 1)))))
+    fix (\\eo.cons (\n.if (== n 0) true  (tl eo (isub_ n 1)))
+                   (\n.if (== n 0) false (hd eo (isub_ n 1))))
   in 
     hd evenodd,tl evenodd;
+
 

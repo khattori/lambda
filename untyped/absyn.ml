@@ -4,15 +4,33 @@
 open ListAux
 open Printf
 open Context
-open Const
 
 exception Parse_error
 exception Multiple_labels of string
 
+(** シンボルの種類 *)
+type kind =
+  | Ctor of int      (** コンストラクタ: アリティ *)
+  | Dtor of int      (** デストラクタ　: アリティ *)
+
+(** 定数項の定義 *)
+type const =
+  | CnInt  of int                (** 整数         *)
+  | CnRea  of float              (** 浮動小数点数 *)
+  | CnStr  of string             (** 文字列       *)
+  | CnSym  of string             (** 定数シンボル *)
+
+(** 定数項を文字列表現に変換する *)
+let const_to_string = function
+  | CnInt i -> sprintf "%d" i
+  | CnRea d -> sprintf "%g" d
+  | CnStr s -> sprintf "\"%s\"" s
+  | CnSym s -> s
+
 (** 項の定義 *)
 (*
   E ::= x (∈ Ident)
-      | c (∈ Const)
+      | c v1 ... vn    ---  c(∈ Const)
       | m (∈ Address)
       | \B.E
       | E1 E2
@@ -27,7 +45,7 @@ exception Multiple_labels of string
 type term =
   | TmVar of int
   | TmMem of int
-  | TmCon of Const.t
+  | TmCon of const * term list
   | TmAbs of binder list * term
   | TmApp of term * term
   | TmLet of binder list * term * term
@@ -37,7 +55,7 @@ type term =
   | TmLbl of term * string
   | TmQuo of term
   | TmUnq of term
-and case = PatnCase of Const.t * term | DeflCase of term
+and case = PatnCase of const * term | DeflCase of term
 and command =
   | Defn of binder list * term
   | Eval of term
@@ -45,9 +63,9 @@ and command =
   | Noop
 
 (** 項がリストかどうか判定 *)
-let rec is_list tm = match tm with
-  | TmCon(CnSym "nil") -> true
-  | TmApp(TmCon(CnSym "cons"),TmTpl[_;t]) -> is_list t
+let rec is_list s vs = match s,vs with
+  | "nil",[] -> true
+  | "cons",[_;TmCon(CnSym s,vs)] -> is_list s vs
   | _ -> false
 
 (** 項を文字列に変換する *)
@@ -55,9 +73,13 @@ let rec to_string ctx tm =
   match tm with
     | TmVar x ->
         sprintf "%s(%d)" (Context.index2name ctx x) x
-    | tm when is_list tm ->
-        sprintf "[%s]" (String.concat "; " (to_string_list ctx tm))
-    | TmCon c -> Const.to_string c
+    | TmCon(cn,[]) -> const_to_string cn
+    | TmCon(CnSym s,vs) when is_list s vs ->
+        sprintf "[%s]" (String.concat "; " (to_string_list ctx vs))
+    | TmCon(cn,vs) ->
+        sprintf "(%s %s)"
+          (const_to_string cn)
+          (String.concat " " (List.map (to_string ctx) vs))
     | TmMem m -> sprintf "<%d>" m
     | TmAbs(bs,tm) ->
         let ctx',s = to_string_binders ctx bs in
@@ -83,13 +105,12 @@ let rec to_string ctx tm =
         sprintf "quote(%s)" (to_string ctx tm)
     | TmUnq tm ->
         sprintf "unquo(%s)" (to_string ctx tm)
-and to_string_list ctx ts = match ts with
-  | TmCon(CnSym "nil") -> []
-  | TmApp(TmCon(CnSym "cons"),TmTpl[t;ts]) ->
-      to_string ctx t::to_string_list ctx ts
+and to_string_list ctx = function
+  | [] -> []
+  | [t;TmCon(_,vs)] -> to_string ctx t::to_string_list ctx vs
   | _ -> assert false
-and to_string_case ctx case = match case with
-  | PatnCase(c,tm) -> sprintf "%s -> %s" (Const.to_string c) (to_string ctx tm)
+and to_string_case ctx = function
+  | PatnCase(c,tm) -> sprintf "%s -> %s" (const_to_string c) (to_string ctx tm)
   | DeflCase tm    -> sprintf "... -> %s" (to_string ctx tm)
 and to_string_binding ctx (binder,tm) = match binder with
   | Wild    -> sprintf    "_ = %s"   (to_string ctx tm)
@@ -119,21 +140,22 @@ let rec print ctx tm =
  *)
 let term_map onvar t =
   let rec walk c t = match t with
-    | TmVar x         -> onvar c x
-    | TmAbs(bs,t1)    -> TmAbs(bs,walk (c + (List.length bs)) t1)
-    | TmApp(t1,t2)    -> TmApp(walk c t1,walk c t2)
-    | TmLet(bs,t1,t2) -> TmLet(bs,walk c t1, walk (c + (List.length bs)) t2)
-    | TmCas(t1,cs)    ->
+    | TmVar x           -> onvar c x
+    | TmCon(cn,vs)      -> TmCon(cn,List.map (walk c) vs)
+    | TmAbs(bs,t1)      -> TmAbs(bs,walk (c + (List.length bs)) t1)
+    | TmApp(t1,t2)      -> TmApp(walk c t1,walk c t2)
+    | TmLet(bs,t1,t2)   -> TmLet(bs,walk c t1, walk (c + (List.length bs)) t2)
+    | TmCas(t1,cs)      ->
         TmCas(walk c t1,
               List.map (function
                           | PatnCase(con,t) -> PatnCase(con,walk c t)
                           | DeflCase t -> DeflCase(walk c t)) cs)
-    | TmTpl(ts)       -> TmTpl(List.map (walk c) ts)
-    | TmRcd(bs)       -> TmRcd(List.map (fun (b,t) -> b,walk c t) bs)
-    | TmLbl(t1,l)     -> TmLbl(walk c t1,l)
-    | TmQuo(t1)       -> TmQuo(walk c t1)
-    | TmUnq(t1)       -> TmUnq(walk c t1)
-    | other           -> other
+    | TmTpl(ts)         -> TmTpl(List.map (walk c) ts)
+    | TmRcd(bs)         -> TmRcd(List.map (fun (b,t) -> b,walk c t) bs)
+    | TmLbl(t1,l)       -> TmLbl(walk c t1,l)
+    | TmQuo(t1)         -> TmQuo(walk c t1)
+    | TmUnq(t1)         -> TmUnq(walk c t1)
+    | other             -> other
   in
     walk 0 t
 
@@ -194,52 +216,6 @@ let term_subst_top t1 t2 =
        else if x == c then term_shift c t2
        else TmVar(x - 1))
     t1
-
-(*
- * is_value: 項が値かどうか判定
- * 
- *)
-let rec is_value tm =
-  let rec walk tm =
-    match tm with
-      | TmApp(tm1,tm2) when is_value tm2 -> walk tm1 - 1
-      | TmTpl tms when List.for_all is_value tms -> 0
-      | TmRcd bs
-          when
-            List.for_all
-              (fun (b,t) ->
-                 match b with Wild | Eager _ -> is_value t | _ -> true) bs
-            -> 0
-      | TmCon(c) when Const.is_ctor c -> Const.arity c
-      | TmCon(c) when Const.is_dtor c -> Const.arity c - 1
-      | TmMem _ | TmCon _ | TmAbs _ -> 0
-      | _ -> -1
-  in
-    walk tm >= 0
-
-(*
- * check_value: 項の汎用判定関数
- *)
-let check_value oncon tm =
-  let rec walk tm =
-    match tm with
-      | TmCon(c) when oncon c -> Const.arity c
-      | TmApp(tm1,tm2) when is_value tm2 -> walk tm1 - 1
-      | _ -> -1
-  in
-    walk tm == 0
-
-(*
- * is_dtor_value: 項がデストラクタかどうか判定
- *)
-let is_dtor_value tm =
-  check_value Const.is_dtor tm
-
-(*
- * is_ctor_value: 項がコンストラクタかどうか判定
- *)
-let is_ctor_value tm =
-  check_value Const.is_ctor tm
 
 (*
  * check_record: レコードに同一ラベル名が含まれているか判定

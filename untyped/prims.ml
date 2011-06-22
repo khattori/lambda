@@ -7,44 +7,37 @@
 open Absyn
 open Const
 
-let tm_error msg = TmApp(TmCon(CnSym "error"),TmCon(CnStr msg))
+let tm_error msg = TmCon(CnSym "error",[TmCon(CnStr msg,[])])
 let tm_error_wrong_argument_type s =
   tm_error (s ^ ": wrong argument type")
 let tm_error_divided_by_zero s =
   tm_error (s ^ ": divided by zero")
 
 let error_ store cs = match cs with
-  | [TmCon(CnStr msg)] -> failwith msg
+  | [TmCon(CnStr msg,_)] -> failwith msg
   | [v] -> tm_error_wrong_argument_type "error_"
   | _ -> assert false
 
-let hd_ store cs = match cs with
-  | [TmApp(TmApp(TmCon(CnSym "::"),v),_)] -> v
-  | _ -> tm_error_wrong_argument_type "hd_"
-let tl_ store cs = match cs with
-  | [TmApp(TmApp(TmCon(CnSym "::"),_),v)] -> v
-  | _ -> tm_error_wrong_argument_type "tl_"
-
 (* 整数演算 *)
 let iadd_ store cs = match cs with
-  | [TmCon(CnInt n); TmCon(CnInt m)] -> TmCon(CnInt(n + m))
+  | [TmCon(CnInt n,_); TmCon(CnInt m,_)] -> tm_int(n + m)
   | _ -> tm_error_wrong_argument_type "iadd_"
 let isub_ store cs = match cs with
-  | [TmCon(CnInt n); TmCon(CnInt m)] -> TmCon(CnInt(n - m))
+  | [TmCon(CnInt n,_); TmCon(CnInt m,_)] -> tm_int(n - m)
   | _ -> tm_error_wrong_argument_type "isub_"
 let imul_ store cs = match cs with
-  | [TmCon(CnInt n); TmCon(CnInt m)] -> TmCon(CnInt(n * m))
+  | [TmCon(CnInt n,_); TmCon(CnInt m,_)] -> tm_int(n * m)
   | _ -> tm_error_wrong_argument_type "imul_"
 let idiv_ store cs = match cs with
-  | [TmCon(CnInt n); TmCon(CnInt m)] ->
-      (try TmCon(CnInt(n / m)) with _ -> tm_error_divided_by_zero "idiv_")
+  | [TmCon(CnInt n,_); TmCon(CnInt m,_)] ->
+      (try tm_int(n / m) with _ -> tm_error_divided_by_zero "idiv_")
   | _ -> tm_error_wrong_argument_type "idiv_"
 let imod_ store cs = match cs with
-  | [TmCon(CnInt n); TmCon(CnInt m)] ->
-      (try TmCon(CnInt(n mod m)) with _ -> tm_error_divided_by_zero "imod_")
+  | [TmCon(CnInt n,_); TmCon(CnInt m,_)] ->
+      (try tm_int(n mod m) with _ -> tm_error_divided_by_zero "imod_")
   | _ -> tm_error_wrong_argument_type "imod_"
 let igt_  store cs = match cs with
-  | [TmCon(CnInt n); TmCon(CnInt m); v1; v2] ->
+  | [TmCon(CnInt n,_); TmCon(CnInt m,_); v1; v2] ->
       if n > m then v1 else v2
   | _ -> tm_error_wrong_argument_type "igt_"
 
@@ -57,17 +50,13 @@ let drf_ store cs = match cs with
   | [TmMem m] -> Store.lookup store m
   | _ -> tm_error_wrong_argument_type "drf_"
 let asn_ store cs = match cs with
-  | [TmMem m;tm] -> Store.update store m tm; TmCon(CnSym "unit")
+  | [TmMem m;tm] -> Store.update store m tm; tm
   | _ -> tm_error_wrong_argument_type "asn_"
 (* 等価比較 *)
 let beq_ store cs = match cs with
-  | [c1; c2; v1; v2] when is_ctor_value c1 && is_ctor_value c2 && c1 = c2 -> v1
+  | [TmCon(c1,vs1);TmCon(c2,vs2); v1; v2] when c1 = c2 && vs1 == vs2 -> v1
   | [x; y; v1; v2] -> v2
   | _ -> assert false
-
-let is_const_ store cs = match cs with
-  | [c] when is_ctor_value c -> TmCon(CnSym "true")
-  | _ -> TmCon(CnSym "false")
 
 (*
  * fix v => v (fix v)
@@ -85,72 +74,23 @@ let exit_ store cs = match cs with
   | _ -> assert false
 
 (** プリミティブの定義 *)
-let ctor_table = [
+(* コンストラクタ *)
+let _ctor_table = [
   ( "nil",   0 );
-  ( "cons",  1 );
+  ( "cons",  2 );
   ( "true",  0 );
   ( "false", 0 );
-  (* 構文木 *)
-  (* type tm =      *)
-  ( "tm_var", 1); (* | TmVar of int *)
-  ( "tm_con", 1); (* | TmCon of Const.t *)
-  ( "tm_mem", 1); (* | TmMem of int    *)
-  ( "tm_abs", 1); (* | TmAbs of binder list * term *)
-  ( "tm_app", 1); (* | TmApp of term * term *)
-  ( "tm_let", 1); (* | TmLet of binder list * term * term *)
-  ( "tm_cas", 1); (* | TmCas of term * case list *)
-  ( "tm_tpl", 1); (* | TmTpl of term list *)
-  ( "tm_rcd", 1); (* | TmRcd of (binder * term) list *)
-  ( "tm_lbl", 1); (* | TmLbl of term * string *)
-  ( "tm_quo", 1); (* | TmQuo of term *)
-  ( "tm_unq", 1); (* | TmUnq of term *)
-  (* and case = PatnCase of Const.t * term | DeflCase of term *)
-  ( "ca_pat", 1);
-  ( "ca_dfl", 1);
-  (* 定数            type t =          *)
-  ( "cn_int", 1); (* | CnInt of int    *)
-  ( "cn_rea", 1); (* | CnRea of float  *)
-  ( "cn_str", 1); (* | CnStr of string *)
-  ( "cn_sym", 1); (* | CnSym of string *)
-  ( "bn_wild",  0);
-  ( "bn_eager", 1);
-  ( "bn_lazy",  1);
 ]
 
-let sym s = TmCon(CnSym s)
-let nil = sym "nil"
-let cons x y = TmApp(sym "cons",TmTpl[x;y])
-
-let rec list xs = match xs with
+(* リスト生成用関数 *)
+let nil  = TmCon(CnSym "nil",[])
+let cons x y = TmApp(TmApp(TmCon(CnSym "cons",[]),x),y)
+let rec list = function
   | [] -> nil
   | x::xs -> cons x (list xs)
 
-let bn_wild    = sym "bn_wild"
-let bn_eager x = TmApp(sym "bn_eager",TmCon(CnStr x))
-let bn_lazy x  = TmApp(sym "bn_lazy", TmCon(CnStr x))
-
-let ca_pat c t = TmApp(sym "ca_pat",TmTpl[c;t])
-let ca_dfl t   = TmApp(sym "ca_dfl",t)
-
-let cn_int n = TmApp(sym "cn_int",TmCon(CnInt n))
-let cn_rea r = TmApp(sym "cn_rea",TmCon(CnRea r))
-let cn_str s = TmApp(sym "cn_str",TmCon(CnStr s))
-let cn_sym s = TmApp(sym "cn_sym",sym s)
-
-let tm_var x        = TmApp(sym "tm_var",TmCon(CnStr x))
-let tm_con c        = TmApp(sym "tm_con",c)
-let tm_mem m        = TmApp(sym "cn_mem",TmCon(CnInt m))
-let tm_abs bs t     = TmApp(sym "tm_abs",TmTpl[bs;t])
-let tm_app t1 t2    = TmApp(sym "tm_app",TmTpl[t1;t2])
-let tm_let bs t1 t2 = TmApp(sym "tm_let",TmTpl[bs;t1;t2])
-let tm_cas t cs     = TmApp(sym "tm_cas",TmTpl[t;cs])
-let tm_tpl ts       = TmApp(sym "tm_tpl",ts)
-let tm_rcd rs       = TmApp(sym "tm_rcd",rs)
-let tm_lbl t l      = TmApp(sym "tm_lbl",TmTpl[t;TmCon(CnStr l)])
-let tm_quo t        = TmApp(sym "tm_quo",t)
-let tm_unq t        = TmApp(sym "tm_unq",t)
-
-let dtor_table = [
+(* デストラクタ *)
+let _dtor_table = [
   ( "iadd_", (2, iadd_)  );
   ( "isub_", (2, isub_)  );
   ( "imul_", (2, imul_)  );
@@ -161,19 +101,17 @@ let dtor_table = [
   ( "!",     (1, drf_)   );
   ( ":=",    (2, asn_)   );
   ( "beq",   (4, beq_)   );
-  ( "is_const_",(1,is_const_));
 (*  ( "fix",   (1, fix_)   ); *)
   ( "exit",  (0, exit_)  );
   ( "error", (1, error_) );
 ]
 
 (* デストラクタの関数を取得 *)
-let get_dtor_fun = function
-  | CnSym s -> snd(List.assoc s dtor_table)
-  | _ -> assert false
+let get_dtor_fun d =
+  snd(List.assoc d _dtor_table)
 
 (* 定数シンボルテーブルに登録 *)
 let _ =
-  List.iter (fun (s,arity)     -> Const.add_ctor s arity) ctor_table;
-  List.iter (fun (s,(arity,_)) -> Const.add_dtor s arity) dtor_table
+  List.iter (fun (s,arity)     -> Const.add_ctor s arity) _ctor_table;
+  List.iter (fun (s,(arity,_)) -> Const.add_dtor s arity) _dtor_table
 

@@ -30,9 +30,9 @@
 %token RBRACKET
 %token EQ
 %token WILDCARD
-%token <string>  IDENT
-%token <Const.t> CONST
-%token <int>     ARITY
+%token <string>        IDENT
+%token <Absyn.const>   CONST
+%token <int>           ARITY
 
 %nonassoc IN
 %nonassoc LET
@@ -145,7 +145,7 @@ apply_expression
 
 atomic_expression
   : IDENT                       { fun ctx -> TmVar(Context.name2index ctx $1) }
-  | CONST                       { fun ctx -> TmCon $1 }
+  | CONST                       { fun ctx -> TmCon($1,[]) }
   | atomic_expression DOT IDENT { fun ctx -> TmLbl($1 ctx, $3) }
   | LPAREN expression RPAREN    { $2 }
   | LPAREN RPAREN               { fun ctx -> Prims.nil }
