@@ -60,7 +60,6 @@ let command_exec store ctx cmd =
     | Defn(bs,tm) ->
         def_binds store ctx bs tm
     | Data(c,arity) ->
-        Const.add_ctor c arity;
         print_data c arity;
         ctx
     | Noop -> ctx

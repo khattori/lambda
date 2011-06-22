@@ -1,0 +1,41 @@
+#
+# リストモジュール定義
+#
+# use util.prog
+#
+def List = {
+    # リストを反転する
+    rev = \ls.
+      let iter = fix (\\iter.\result.\ls.
+          case ls of
+              nil -> result
+            | cons -> \hd.\tl.iter (cons hd result) tl)
+      in
+        iter [] ls;
+    # リストの長さ
+    len = \ls.
+      let iter = fix (\\iter.\len.\ls.
+         case ls of
+             nil -> len
+           | cons -> \_.\tl.iter (iadd_ len 1) tl)
+      in
+        iter 0 ls;
+    # リストのメンバーを取得する
+    assoc = fix (\\assoc.\k.\ls.
+      case ls of
+          nil -> nil
+        | cons -> (\k',v.\tl.if (== k k') v (assoc k tl)));
+    mem_assoc = fix (\\mem_assoc.\k.\ls.
+      case ls of
+          nil -> false
+        | cons -> (\k',_.\tl.if (== k k') true (mem_assoc k tl)));
+    # 2つのリストの走査
+    iter2 = fix (\\iter2.\f.\ls1.\ls2.
+      case ls1 of
+          nil -> if (== ls2 nil) () (error "iter2")
+        | cons -> \x1.\xs1.case ls2 of
+                               nil -> error "iter2"
+                             | cons -> \x2.\xs2.
+                                 let _ = f x1 x2 in iter2 f xs1 xs2
+    )
+};

@@ -70,7 +70,10 @@ command
   | DEF binder_list EQ expression { fun ctx ->
                                       let bs,ctx' = $2 ctx in
                                         Defn(bs,$4 ctx),ctx'     }
-  | DATA IDENT arity_option       { fun ctx -> Data($2,$3),ctx   }
+  | DATA IDENT arity_option       { fun ctx ->
+                                      let c,arity = $2,$3 in
+                                        Const.add_ctor c arity;
+                                        Data(c,arity),ctx        }
   | /* empty */                   { fun ctx -> Noop,ctx          }
 ;
 command_list
@@ -135,8 +138,18 @@ case_list
   | default_case %prec below_VBAR { fun ctx -> [$1 ctx]       }
   | pattern_case VBAR case_list   { fun ctx -> $1 ctx::$3 ctx }
 ;
-pattern_case : CONST RARROW expression { fun ctx -> PatnCase($1,$3 ctx) };
-default_case : DDDOT RARROW expression { fun ctx -> DeflCase($3 ctx)    };
+pattern_case
+  : CONST RARROW expression { fun ctx -> PatnCase($1,$3 ctx) }
+  | IDENT RARROW expression { fun ctx ->
+                                let s = $1 in
+                                  if Const.is_symbol s then
+                                    PatnCase(CnSym s,$3 ctx)
+                                  else
+                                    raise Parse_error        }
+;
+default_case
+  : DDDOT RARROW expression { fun ctx -> DeflCase($3 ctx)    }
+;
 
 apply_expression
   : atomic_expression                  { $1 }
@@ -144,7 +157,12 @@ apply_expression
 ;
 
 atomic_expression
-  : IDENT                       { fun ctx -> TmVar(Context.name2index ctx $1) }
+  : IDENT                       { fun ctx ->
+                                    let s = $1 in
+                                      if Const.is_symbol s then
+                                        TmCon(CnSym s,[])
+                                      else
+                                        TmVar(Context.name2index ctx s) }
   | CONST                       { fun ctx -> TmCon($1,[]) }
   | atomic_expression DOT IDENT { fun ctx -> TmLbl($1 ctx, $3) }
   | LPAREN expression RPAREN    { $2 }

@@ -41,6 +41,17 @@ let igt_  store cs = match cs with
       if n > m then v1 else v2
   | _ -> tm_error_wrong_argument_type "igt_"
 
+(* 文字列演算 *)
+let scat_ store cs = match cs with
+  | [TmCon(CnStr s,_); TmCon(CnStr t,_)] -> tm_str(s^t)
+  | _ -> tm_error_wrong_argument_type "scat_"
+let itos_ store cs = match cs with
+  | [TmCon(CnInt n,_)] -> tm_str(string_of_int n)
+  | _ -> tm_error_wrong_argument_type "itos_"
+let mtos_ store cs = match cs with
+  | [TmMem n] -> tm_str("<" ^ string_of_int n ^ ">")
+  | _ -> tm_error_wrong_argument_type "mtos_"
+
 (* 格納域操作 *)
 let ref_ store cs = match cs with
   | [v] ->
@@ -96,6 +107,9 @@ let _dtor_table = [
   ( "imul_", (2, imul_)  );
   ( "idiv_", (2, idiv_)  );
   ( "imod_", (2, imod_)  );
+  ( "itos_", (1, itos_)  );
+  ( "mtos_", (1, mtos_)  );
+  ( "scat_", (2, scat_)  );
   ( "igt_",  (4, igt_)   );
   ( "ref",   (1, ref_)   );
   ( "!",     (1, drf_)   );

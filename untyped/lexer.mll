@@ -61,41 +61,33 @@ rule token = parse
         let s = lexeme lexbuf in
           if List.mem_assoc s keyword_table then
             List.assoc s keyword_table
-          else if Const.is_symbol s then
-            CONST(CnSym s)
           else
             IDENT s
       }
-  | "..." { DDDOT }
-  | "="   { EQ }
-  | "->"  { RARROW }
-  | "|"   { VBAR }
+  | "..." {   DDDOT }
+  | "="    { EQ }
+  | "->"   { RARROW }
+  | "|"    { VBAR }
   | "#" nonnl* newline
-      { new_line lexbuf; token lexbuf }
+           { new_line lexbuf; token lexbuf }
   | operator_char+
-      {
-        let s = lexeme lexbuf in
-          if Const.is_symbol s then
-            CONST(CnSym s)
-          else
-            IDENT s
-      }
-  | num  { CONST(CnInt(int_of_string(lexeme lexbuf))) }
-  | "\\" { BACKSLASH }
+           { IDENT(lexeme lexbuf) }
+  | num    { CONST(CnInt(int_of_string(lexeme lexbuf))) }
+  | "\\"   { BACKSLASH }
   (* セパレータ *)
-  | "("  { LPAREN }
-  | ")"  { RPAREN }
-  | "{"  { LBRACE }
-  | "}"  { RBRACE }
-  | "["  { LBRACKET }
-  | "]"  { RBRACKET }
-  | "."  { DOT }
-  | ","  { COMMA }
+  | "("    { LPAREN }
+  | ")"    { RPAREN }
+  | "{"    { LBRACE }
+  | "}"    { RBRACE }
+  | "["    { LBRACKET }
+  | "]"    { RBRACKET }
+  | "."    { DOT }
+  | ","    { COMMA }
   | float_literal
-      { CONST(CnRea(float_of_string(lexeme lexbuf))) }
-  | ";"  { SEMI }
-  | '"'  { CONST(CnStr(string (Buffer.create 0) lexbuf)) }
-  | eof  { EOF }
+           { CONST(CnRea(float_of_string(lexeme lexbuf))) }
+  | ";"    { SEMI }
+  | '"'    { CONST(CnStr(string (Buffer.create 0) lexbuf)) }
+  | eof    { EOF }
   | _ as c { raise (Illegal_character c) }
 (* 文字列リテラルの処理 *)
 and string strbuf = parse

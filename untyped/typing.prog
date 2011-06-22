@@ -1,0 +1,103 @@
+# 型定義
+data tc_int;
+data tc_rea;
+data tc_str;
+data tc_sym/1;
+
+data ty_meta/1;    # ref ty
+data ty_con/2;     # tc , tys
+data ty_arrow/2;   # ty1 -> ty2
+
+# パス圧縮を行う
+def repr = fix (\\repr.\ty.
+  case ty of
+      ty_meta -> \r.if (== (!r) nil)
+                       ty
+                       (let ty = repr (!r) in
+                        let _ = := r ty in ty)
+    | ... -> \ty.ty);
+
+# フレッシュな型変数を生成
+def fresh_meta = \_.ty_meta(ref nil);
+
+def ty_int      = ty_con tc_int [];
+def ty_rea      = ty_con tc_rea [];
+def ty_str      = ty_con tc_str [];
+def ty_bool     = ty_con (tc_sym "bool") [];
+
+def type_table = [
+ ( "true",  ty_bool );
+ ( "false", ty_bool );
+ ( "iadd_", ty_arrow ty_int (ty_arrow ty_int ty_int));
+ ( "isub_", ty_arrow ty_int (ty_arrow ty_int ty_int));
+ ( "imul_", ty_arrow ty_int (ty_arrow ty_int ty_int));
+ ( "idiv_", ty_arrow ty_int (ty_arrow ty_int ty_int));
+ ( "imod_", ty_arrow ty_int (ty_arrow ty_int ty_int));
+ ( "scat_", ty_arrow ty_str (ty_arrow ty_str ty_str));
+ ( "itos_", ty_arrow ty_int ty_str)
+];
+
+def typeof_const = \cn.
+  case cn of
+      cn_int -> \_.ty_int
+    | cn_rea -> \_.ty_rea
+    | cn_str -> \_.ty_str
+    | cn_sym -> \s.List.assoc s type_table
+;
+
+def unify = fix (\\unify.\ty1.\ty2.
+  let ty1 = repr ty1 in
+  let ty2 = repr ty2 in
+    if (== ty1 ty2) () (
+      case ty1 of
+          ty_meta  -> \r.let _ = := r ty2 in ()
+        | ty_arrow -> \t1.\t2.
+            case ty2 of ty_meta  -> \_.unify ty2 ty1
+                      | ty_arrow -> \t1'.\t2'.
+                          let _ = unify t1 t1' in unify t2 t2'
+                      | ... -> \_.error "unify"
+        | ty_con   -> \c.\ts.
+            case ty2 of ty_meta -> \_.unify ty2 ty1
+                      | ty_con  -> \c'.\ts'.
+                          if (andalso (== c c')
+                                      (== (List.len ts) (List.len ts')))
+                          (List.iter2 unify ts ts')
+                          (error "unify")
+                      | ... -> \_.error "unify"));
+
+def typeof = fix (\\typeof.\tenv.\tm.
+    case tm of
+        tm_var -> \x.List.assoc x tenv
+      | tm_con -> \c.\_.typeof_const c
+      | tm_abs -> \b.\t1.
+          let ty1 = fresh_meta() in
+          let x = case b of bn_wild  -> "_"
+                          | bn_eager -> \x.x
+                          | bn_lazy -> \x.x in
+          let tenv' = cons (x,ty1) tenv in
+          let ty2 = typeof tenv' t1 in
+            ty_arrow ty1 ty2
+      | tm_app -> \t1.\t2.
+          let ty = fresh_meta() in
+          let ty1 = typeof tenv t1 in
+          let ty2 = typeof tenv t2 in
+          let _ = unify ty1 (ty_arrow ty2 ty) in
+            repr ty
+);
+
+def tc2str = \tc.
+  case tc of
+      tc_int -> "int"
+    | tc_rea -> "real"
+    | tc_str -> "string"
+    | tc_sym -> \s.s;
+
+def ty2str = fix (\\ty2str.\ty.
+  let ty = repr ty in
+    case ty of
+        ty_meta -> \m.scat_ "t" (mtos_ m)
+      | ty_arrow -> \t1.\t2.scat_ "("
+                             (scat_ (ty2str t1) 
+                               (scat_ ("->")
+                                 (scat_ (ty2str t2) ")")))
+      | ty_con -> \c.\ts.tc2str c);
