@@ -24,7 +24,7 @@ type const =
 let const_to_string = function
   | CnInt i -> sprintf "%d" i
   | CnRea d -> sprintf "%g" d
-  | CnStr s -> sprintf "\"%s\"" s
+  | CnStr s -> sprintf "%S" s
   | CnSym s -> s
 
 (** 項の定義 *)

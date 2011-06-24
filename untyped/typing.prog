@@ -1,3 +1,29 @@
+#
+# 簡単な型推論プログラムのサンプル
+#
+# --- util.prog, list.progが必要
+# --- 単純型付きλ計算の型推論を行う．（let多相は未対応）
+# --- 一部の構文に対してのみ実装してるので，caseやletなど型推論できな
+#     い式もある．
+#
+#
+# 以下のようにインタプリタを起動する．
+# $ ./untyped.exe util.prog list.prog typing.prog
+#
+# 実行例:
+#
+# > type 0;
+# ===> "int"
+# > type (iadd_ 3 4);
+# ===> "int"
+# > type (\x.x);
+# ===> "t<0>->t<0>"
+# > type ((\x.x) "foo");
+# ===> "string"
+#
+#
+#
+
 # 型定義
 data tc_int;
 data tc_rea;
@@ -101,3 +127,5 @@ def ty2str = fix (\\ty2str.\ty.
                                (scat_ ("->")
                                  (scat_ (ty2str t2) ")")))
       | ty_con -> \c.\ts.tc2str c);
+
+def type = \\t.ty2str(typeof [] (quote t));

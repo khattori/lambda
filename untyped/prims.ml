@@ -48,6 +48,9 @@ let scat_ store cs = match cs with
 let itos_ store cs = match cs with
   | [TmCon(CnInt n,_)] -> tm_str(string_of_int n)
   | _ -> tm_error_wrong_argument_type "itos_"
+let outs_ store cs = match cs with
+  | [TmCon(CnStr s,_)] -> print_string s; tm_str(s)
+  | _ -> tm_error_wrong_argument_type "outs_"
 let mtos_ store cs = match cs with
   | [TmMem n] -> tm_str("<" ^ string_of_int n ^ ">")
   | _ -> tm_error_wrong_argument_type "mtos_"
@@ -110,6 +113,7 @@ let _dtor_table = [
   ( "itos_", (1, itos_)  );
   ( "mtos_", (1, mtos_)  );
   ( "scat_", (2, scat_)  );
+  ( "outs_", (1, outs_)  );
   ( "igt_",  (4, igt_)   );
   ( "ref",   (1, ref_)   );
   ( "!",     (1, drf_)   );

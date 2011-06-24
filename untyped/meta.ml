@@ -101,11 +101,12 @@ let rec term_to_ctor ctx = function
   | TmQuo tm       -> tm_quo (term_to_ctor ctx tm)
   | TmUnq tm       -> tm_unq (term_to_ctor ctx tm)
 and terms_to_ctor ctx = function
+  | []   -> nil
   | [tm] -> term_to_ctor ctx tm
-  | tms -> TmTpl(List.map (term_to_ctor ctx) tms)
+  | tms  -> TmTpl(List.map (term_to_ctor ctx) tms)
 and cases_to_ctor ctx = function
   | [c] -> case_to_ctor ctx c
-  | cs -> TmTpl(List.map (case_to_ctor ctx) cs)
+  | cs  -> TmTpl(List.map (case_to_ctor ctx) cs)
 and case_to_ctor ctx = function
   | PatnCase(c,t) -> ca_pat (con_to_ctor c) (term_to_ctor ctx t)
   | DeflCase t    -> ca_dfl (term_to_ctor ctx t)
@@ -161,9 +162,11 @@ let rec ctor_to_term ctx = function
       TmQuo(ctor_to_term ctx t)
   | TmCon(CnSym "tm_unq",[t]) ->
       TmUnq(ctor_to_term ctx t)
-  | _ -> Prims.tm_error "*** ctor_to_term ***"
+  | t -> Prims.tm_error
+      (Printf.sprintf "*** ctor_to_term ***:%s" (to_string ctx t))
 and ctor_to_terms ctx = function
   | TmTpl ts -> List.map (ctor_to_term ctx) ts
+  | TmCon(CnSym "nil",[]) -> []
   | tm -> [ctor_to_term ctx tm]
 and ctor_to_case ctx = function
   | TmCon(CnSym "ca_pat",[c;t]) ->
