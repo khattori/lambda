@@ -25,10 +25,16 @@ def List = {
       case ls of
           nil -> nil
         | cons -> (\k',v.\tl.if (== k k') v (assoc k tl)));
+    # リストのメンバーが存在するか
     mem_assoc = fix (\\mem_assoc.\k.\ls.
       case ls of
           nil -> false
         | cons -> (\k',_.\tl.if (== k k') true (mem_assoc k tl)));
+    # リストの操作
+    iter = fix (\\iter.\f.\ls.
+      case ls of
+          nil -> nil
+        | cons -> \x.\xs.let _ = f x in iter f xs);
     # 2つのリストの走査
     iter2 = fix (\\iter2.\f.\ls1.\ls2.
       case ls1 of

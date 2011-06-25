@@ -69,6 +69,7 @@ let asn_ store cs = match cs with
 (* 等価比較 *)
 let beq_ store cs = match cs with
   | [TmCon(c1,vs1);TmCon(c2,vs2); v1; v2] when c1 = c2 && vs1 == vs2 -> v1
+  | [TmMem m1;TmMem m2; v1; v2] when m1 = m2 -> v1
   | [x; y; v1; v2] -> v2
   | _ -> assert false
 

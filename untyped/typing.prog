@@ -71,12 +71,33 @@ def typeof_const = \cn.
     | cn_sym -> \s.List.assoc s type_table
 ;
 
+#
+# オカーチェック
+#
+def occur = \m.\ty.
+  let walk = fix (\\walk.\ty.
+    case ty of
+        ty_meta  -> \m'.if (== m m')
+                           (error "occur_check")
+                           (walk (!m'))
+      | ty_arrow -> \t1.\t2.let _ = walk t1 in walk t2
+      | ty_con   -> \_.\ts.List.iter walk ts
+      | nil      -> ()
+  )
+  in
+    walk ty;
+
+#
+# 単一化手続き
+#
 def unify = fix (\\unify.\ty1.\ty2.
   let ty1 = repr ty1 in
   let ty2 = repr ty2 in
     if (== ty1 ty2) () (
       case ty1 of
-          ty_meta  -> \r.let _ = := r ty2 in ()
+          ty_meta  -> \m.
+            let _ = occur m ty2 in
+            let _ = := m ty2 in ()
         | ty_arrow -> \t1.\t2.
             case ty2 of ty_meta  -> \_.unify ty2 ty1
                       | ty_arrow -> \t1'.\t2'.

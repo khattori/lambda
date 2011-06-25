@@ -27,7 +27,7 @@ let create () =
     格納域が一杯になったら，倍の領域を確保する
  *)
 let extend (arr_ref,n_ref) v =
-  if Array.length !arr_ref >= !n_ref then
+  if !n_ref >= Array.length !arr_ref then
     arr_ref := Array.append !arr_ref !arr_ref;
   !arr_ref.(!n_ref) <- v;
   _incr_ret n_ref
