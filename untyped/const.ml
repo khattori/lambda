@@ -48,14 +48,15 @@ let rec is_value tm =
             (fun (b,t) ->
                match b with Wild | Eager _ -> is_value t | _ -> true) bs
       | TmCon(CnSym s,vs) -> (
-          match List.assoc s !_table_ref with
-            | Ctor _ -> true
-            | Dtor a -> List.length vs < a
+            match List.assoc s !_table_ref with
+              | Ctor _ -> true
+              | Dtor a -> List.length vs < a
         )
       | TmCon _ | TmMem _ | TmAbs _ -> true
       | _ -> false
   in
     walk tm
+
 
 
 (* 定数項の生成用関数 *)

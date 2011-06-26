@@ -9,7 +9,7 @@ Untyped Lambda Interpreterプログラムは，型システムの実験用に作
 定数，など）
 
 他に特徴的な拡張としては，メタプログラミングを可能にするための，
-quote/unquo式がある．これはLispのquoteとevalに相当する．
+quote/unquo式がある．これはそれぞれLispのquoteとevalに相当する．
 
 
 1.【起動方法と基本的な使い方】==================================

@@ -35,12 +35,14 @@ OCamlGeneratedFiles(parser.ml lexer.ml)
 #
 
 FILES[] =
+	listAux
 	absyn
+	command
 	const
 	context
 	core
 	error
-	listAux
+	loader
 	main
 	meta
 	prims

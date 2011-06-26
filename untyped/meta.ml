@@ -51,7 +51,7 @@ let cn_sym s   = tm_sym "cn_sym" [tm_str s]
 (* 項のデータ表現の定義 *)
 let tm_var x        = tm_sym "tm_var" [tm_str x]
 let tm_con c vs     = tm_sym "tm_con" [c;vs]
-let tm_mem m        = tm_sym "cn_mem" [tm_int m]
+let tm_mem m        = tm_sym "tm_mem" [tm_int m]
 let tm_abs bs t     = tm_sym "tm_abs" [bs;t]
 let tm_app t1 t2    = tm_sym "tm_app" [t1;t2]
 let tm_let bs t1 t2 = tm_sym "tm_let" [bs;t1;t2]

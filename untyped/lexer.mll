@@ -11,10 +11,11 @@
   exception Unterminated_string
 
   let keyword_table = [
-    ( "in",    IN    );
-    ( "let",   LET   );
-    ( "def",   DEF   );
     ( "data",  DATA  );
+    ( "def",   DEF   );
+    ( "use",   USE   );
+    ( "let",   LET   );
+    ( "in",    IN    );
     ( "case",  CASE  );
     ( "of",    OF    );
     ( "quote", QUOTE );

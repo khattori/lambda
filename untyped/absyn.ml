@@ -56,11 +56,6 @@ type term =
   | TmQuo of term
   | TmUnq of term
 and case = PatnCase of const * term | DeflCase of term
-and command =
-  | Defn of binder list * term
-  | Eval of term
-  | Data of string * int
-  | Noop
 
 (** 項がリストかどうか判定 *)
 let rec is_list s vs = match s,vs with

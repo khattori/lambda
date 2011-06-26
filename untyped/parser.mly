@@ -2,15 +2,18 @@
 %{
   open Absyn
   open Context
+  open Command
 %}
 
 /* トークン */
 %token EOF
 /* キーワードトークン */
-%token IN
-%token LET
-%token DEF
 %token DATA
+%token DEF
+%token USE
+
+%token LET
+%token IN
 %token CASE
 %token OF
 %token QUOTE
@@ -46,16 +49,16 @@
 
 
 %start main toplevel
-%type <Absyn.term Context.t -> Absyn.command list> main
-%type <Absyn.term Context.t -> Absyn.command> toplevel
+%type <Absyn.term Context.t -> Command.t list> main
+%type <Absyn.term Context.t -> Command.t> toplevel
 %%
 
 /* バッチモード時のメイン */
 main
   : command_list EOF { fun ctx ->
-                         let cmds,_ = $1 ctx in
+                         let cmds,_= $1 ctx in
                            List.rev cmds           }
-  | error        { raise Absyn.Parse_error }
+  | error            { raise Absyn.Parse_error     }
 ;
 
 /* 対話モード時のトップレベル */
@@ -66,15 +69,20 @@ toplevel
 ;
 
 command
-  : expression                    { fun ctx -> Eval($1 ctx),ctx  }
+  : expression                    { fun ctx -> Eval($1 ctx),ctx        }
   | DEF binder_list EQ expression { fun ctx ->
                                       let bs,ctx' = $2 ctx in
-                                        Defn(bs,$4 ctx),ctx'     }
+                                        Defn(bs,$4 ctx),ctx'           }
   | DATA IDENT arity_option       { fun ctx ->
                                       let c,arity = $2,$3 in
                                         Const.add_ctor c arity;
-                                        Data(c,arity),ctx        }
-  | /* empty */                   { fun ctx -> Noop,ctx          }
+                                        Data(c,arity),ctx              }
+  | USE IDENT                     { fun ctx ->
+                                      let ctx' =
+                                        Command.use_module $2 in
+                                        ( Use($2,ctx'),
+                                          Context.join ctx' ctx )      }
+  | /* empty */                   { fun ctx -> Noop,ctx                }
 ;
 command_list
   : command                       { fun ctx ->

@@ -3,6 +3,8 @@
 #
 # use util.prog
 #
+use util;
+
 def List = {
     # リストを反転する
     rev = \ls.

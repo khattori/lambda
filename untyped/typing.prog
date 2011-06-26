@@ -8,7 +8,11 @@
 #
 #
 # 以下のようにインタプリタを起動する．
-# $ ./untyped.exe util.prog list.prog typing.prog
+# $ ./untyped.exe typing.prog
+#
+# あるいは、インタプリタ起動後、
+# > use typing;
+# とする
 #
 # 実行例:
 #
@@ -21,8 +25,7 @@
 # > type ((\x.x) "foo");
 # ===> "string"
 #
-#
-#
+use list;
 
 # 型定義
 data tc_int;

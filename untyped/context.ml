@@ -28,6 +28,9 @@ type 'a t = (string * 'a binding) list
 (** 空のコンテクストを返す *)
 let empty = []
 
+(** コンテクストを結合する *)
+let join ctx1 ctx2 = ctx1 @ ctx2
+
 (** De Bruijinインデックスに対応する変数名を取得 *)
 let index2name ctx x =
   fst (List.nth ctx x)
@@ -89,5 +92,3 @@ let get_term ctx x =
   match snd(List.nth ctx x) with
     | TermBind(tm,o) -> tm,o
     | _ -> assert false
-
-
