@@ -2,7 +2,7 @@
 # sample program
 # use util.prog
 #
-
+use util;
 def fact  = fix (\\fact.\n.if (== n 0) 1 ( imul_ n (fact (isub_ n 1))));
 
 def even,odd =
@@ -11,5 +11,3 @@ def even,odd =
                    (\n.if (== n 0) false (hd eo (isub_ n 1))))
   in 
     hd evenodd,tl evenodd;
-
-

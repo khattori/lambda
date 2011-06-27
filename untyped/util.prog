@@ -20,3 +20,4 @@ def fix   = \f.(\x.f (x x)) (\x.f (x x));
 
 def maxv = fix (\\maxv.\x.\y.if (== y nil) x (if (> x y) (maxv x) (maxv y)));
 def minv = fix (\\minv.\x.\y.if (== y nil) x (if (> x y) (minv y) (minv x)));
+

@@ -34,7 +34,7 @@ data tc_str;
 data tc_sym/1;
 
 data ty_meta/1;    # ref ty
-data ty_con/2;     # tc , tys
+data ty_con/2;     # tc, tys
 data ty_arrow/2;   # ty1 -> ty2
 
 # パス圧縮を行う
@@ -53,6 +53,7 @@ def ty_int      = ty_con tc_int [];
 def ty_rea      = ty_con tc_rea [];
 def ty_str      = ty_con tc_str [];
 def ty_bool     = ty_con (tc_sym "bool") [];
+def ty_tuple ts = ty_con (tc_sym "tuple") ts;
 
 def type_table = [
  ( "true",  ty_bool );
@@ -119,6 +120,7 @@ def typeof = fix (\\typeof.\tenv.\tm.
     case tm of
         tm_var -> \x.List.assoc x tenv
       | tm_con -> \c.\_.typeof_const c
+      | tm_tpl -
       | tm_abs -> \b.\t1.
           let ty1 = fresh_meta() in
           let x = case b of bn_wild  -> "_"
