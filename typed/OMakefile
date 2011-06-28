@@ -44,13 +44,12 @@ FILES[] =
 	error
 	loader
 	main
-	meta
 	prims
 	store
 	lexer
 	parser
 
-PROGRAM = untyped
+PROGRAM = typed
 # OCAML_LIBS +=
 # OCAML_CLIBS +=
 # OCAML_OTHER_LIBS +=

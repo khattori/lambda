@@ -46,22 +46,9 @@ type term =
   | TmVar of int
   | TmMem of int
   | TmCon of const * term list
-  | TmAbs of binder list * term
+  | TmAbs of binder * term
   | TmApp of term * term
-  | TmLet of binder list * term * term
-  | TmCas of term * case list
-  | TmTpl of term list
-  | TmRcd of (binder * term) list
-  | TmLbl of term * string
-  | TmQuo of term
-  | TmUnq of term
-and case = PatnCase of const * term | DeflCase of term
-
-(** 項がリストかどうか判定 *)
-let rec is_list s vs = match s,vs with
-  | "nil",[] -> true
-  | "cons",[_;TmCon(CnSym s,vs)] -> is_list s vs
-  | _ -> false
+  | TmLet of binder * term * term
 
 (** 項を文字列に変換する *)
 let rec to_string ctx tm =
@@ -69,58 +56,24 @@ let rec to_string ctx tm =
     | TmVar x ->
         sprintf "%s(%d)" (Context.index2name ctx x) x
     | TmCon(cn,[]) -> const_to_string cn
-    | TmCon(CnSym s,vs) when is_list s vs ->
-        sprintf "[%s]" (String.concat "; " (to_string_list ctx vs))
     | TmCon(cn,vs) ->
         sprintf "(%s %s)"
           (const_to_string cn)
           (String.concat " " (List.map (to_string ctx) vs))
     | TmMem m -> sprintf "<%d>" m
-    | TmAbs(bs,tm) ->
-        let ctx',s = to_string_binders ctx bs in
+    | TmAbs(b,tm) ->
+        let ctx',s = to_string_binding ctx b in
           sprintf "(\\%s.%s)" s (to_string ctx' tm)
     | TmApp(tm1,tm2) ->
         sprintf "(%s %s)" (to_string ctx tm1) (to_string ctx tm2)
-    | TmLet(bs,tm1,tm2) ->
-        let ctx',s = to_string_binders ctx bs in
+    | TmLet(b,tm1,tm2) ->
+        let ctx',s = to_string_binding ctx b in
           sprintf "(let %s = %s in %s)"
             s (to_string ctx tm1) (to_string ctx' tm2)
-    | TmCas(tm1,cases) ->
-        sprintf "(case %s of %s)"
-          (to_string ctx tm1)
-          (String.concat " | " (List.map (to_string_case ctx) cases))
-    | TmTpl tms ->
-        sprintf "(%s)" (String.concat ", " (List.map (to_string ctx) tms))
-    | TmLbl(tm1,l) ->
-        sprintf "%s.%s" (to_string ctx tm1) l
-    | TmRcd rcd ->
-        sprintf "{ %s }"
-          (String.concat "; " (List.map (to_string_binding ctx) rcd))
-    | TmQuo tm ->
-        sprintf "quote(%s)" (to_string ctx tm)
-    | TmUnq tm ->
-        sprintf "unquo(%s)" (to_string ctx tm)
-and to_string_list ctx = function
-  | [] -> []
-  | [t;TmCon(_,vs)] -> to_string ctx t::to_string_list ctx vs
-  | _ -> assert false
-and to_string_case ctx = function
-  | PatnCase(c,tm) -> sprintf "%s -> %s" (const_to_string c) (to_string ctx tm)
-  | DeflCase tm    -> sprintf "... -> %s" (to_string ctx tm)
 and to_string_binding ctx (binder,tm) = match binder with
   | Wild    -> sprintf    "_ = %s"   (to_string ctx tm)
   | Eager x -> sprintf   "%s = %s" x (to_string ctx tm)
   | Lazy  x -> sprintf "\\%s = %s" x (to_string ctx tm)
-and to_string_binders ctx bs =
-  let tsb (ctx',ss) b = match b with
-    | Wild -> (Context.add_bind ctx' b),"_"::ss
-    | Eager x ->
-        let ctx'',x' = Context.fresh_name ctx' x in ctx'',x'::ss
-    | Lazy x ->
-        let ctx'',x' = Context.fresh_name ctx' x in ctx'',sprintf "\\%s" x'::ss
-  in
-  let ctx',ss = List.fold_left tsb (ctx,[]) bs in
-    ctx',String.concat "," (List.rev ss)
 
 (*
  * print: 抽象構文木の出力
@@ -137,19 +90,9 @@ let term_map onvar t =
   let rec walk c t = match t with
     | TmVar x           -> onvar c x
     | TmCon(cn,vs)      -> TmCon(cn,List.map (walk c) vs)
-    | TmAbs(bs,t1)      -> TmAbs(bs,walk (c + (List.length bs)) t1)
+    | TmAbs(b,t1)       -> TmAbs(b,walk (c + 1) t1)
     | TmApp(t1,t2)      -> TmApp(walk c t1,walk c t2)
-    | TmLet(bs,t1,t2)   -> TmLet(bs,walk c t1, walk (c + (List.length bs)) t2)
-    | TmCas(t1,cs)      ->
-        TmCas(walk c t1,
-              List.map (function
-                          | PatnCase(con,t) -> PatnCase(con,walk c t)
-                          | DeflCase t -> DeflCase(walk c t)) cs)
-    | TmTpl(ts)         -> TmTpl(List.map (walk c) ts)
-    | TmRcd(bs)         -> TmRcd(List.map (fun (b,t) -> b,walk c t) bs)
-    | TmLbl(t1,l)       -> TmLbl(walk c t1,l)
-    | TmQuo(t1)         -> TmQuo(walk c t1)
-    | TmUnq(t1)         -> TmUnq(walk c t1)
+    | TmLet(b,t1,t2)    -> TmLet(b,walk c t1, walk (c + 1) t2)
     | other             -> other
   in
     walk 0 t
@@ -212,12 +155,3 @@ let term_subst_top t1 t2 =
        else TmVar(x - 1))
     t1
 
-(*
- * check_record: レコードに同一ラベル名が含まれているか判定
- *)
-let check_record rcd =
-  let xs = List.filter_map (
-    fun (b,_) -> match b with Eager x | Lazy x -> Some x | Wild -> None
-  ) rcd in
-    List.check_dup (fun x -> raise (Multiple_labels x)) xs;
-    rcd

@@ -3,9 +3,8 @@ open Absyn
 
 (* コマンド定義 *)
 type t =
-  | Defn of binder list * term
+  | Defn of binder * term
   | Eval of term
-  | Data of string * int
   | Use  of string * term Context.t
   | Noop
 
@@ -27,29 +26,17 @@ let print_bind ctx b tm =
   )
 
 (** 大域変数を定義する *)
-let def_binds store ctx bs tm =
-  let rec iter bs tms o ctx' = match bs,tms with
-    | [],[] -> ctx'
-    | Wild as b::bs',tm::tms' ->
-        let v = Core.eval ctx store tm in
-          print_bind ctx b v;
-          iter bs' tms' o ctx'
-    | (Eager x) as b::bs',tm::tms' ->
-        let v = Core.eval ctx store tm in
-          print_bind ctx b v;
-          iter bs' tms' (o + 1) (Context.add_term ctx' x v o)
-    | (Lazy x) as b::bs',tm::tms' ->
-        print_bind ctx b tm;
-        iter bs' tms' (o + 1) (Context.add_term ctx' x tm o)
-    | _ -> assert false
-  in
-    match bs with
-      | [b] -> iter bs [tm] 1 ctx
-      | bs -> match Core.eval_tuple ctx store tm with
-          | TmTpl tms when List.length bs == List.length tms ->
-              iter bs tms 1 ctx
-          | _ -> failwith "*** tuple mismatch ***"
-
+let def_bind store ctx b tm = match b with
+  | Wild ->
+      let v = Core.eval ctx store tm in
+        print_bind ctx b v
+  | Eager x ->
+      let v = Core.eval ctx store tm in
+        print_bind ctx b v;
+        Context.add_term ctx x v 1
+  | Lazy x ->
+      print_bind ctx b tm;
+      Context.add_term ctx' x tm 1
 
 (* ロード関数のテーブル定義 *)
 type loader_t = {
@@ -87,10 +74,7 @@ let exec store ctx cmd =
         let v = Core.eval ctx store tm in
           print_result ctx v;
           ctx
-    | Defn(bs,tm) ->
-        def_binds store ctx bs tm
-    | Data(c,arity) ->
-        print_data c arity;
-        ctx
+    | Defn(b,tm) ->
+        def_bind store ctx b tm
     | Use(name,ctx') -> Context.join ctx' ctx
     | Noop -> ctx

@@ -11,15 +11,10 @@
   exception Unterminated_string
 
   let keyword_table = [
-    ( "data",  DATA  );
     ( "def",   DEF   );
     ( "use",   USE   );
     ( "let",   LET   );
     ( "in",    IN    );
-    ( "case",  CASE  );
-    ( "of",    OF    );
-    ( "quote", QUOTE );
-    ( "unquo", UNQUO );
   ]
 
   let init lexbuf fname =
@@ -56,7 +51,6 @@ rule token = parse
   | blank+  { token lexbuf }
   | newline { new_line lexbuf; token lexbuf }
   | "_"     { WILDCARD }
-  | "/" (num as n) { ARITY(int_of_string n) }
   | ident_char_head ident_char*
       {
         let s = lexeme lexbuf in
@@ -65,10 +59,7 @@ rule token = parse
           else
             IDENT s
       }
-  | "..." {   DDDOT }
   | "="    { EQ }
-  | "->"   { RARROW }
-  | "|"    { VBAR }
   | "#" nonnl* newline
            { new_line lexbuf; token lexbuf }
   | operator_char+
@@ -78,12 +69,7 @@ rule token = parse
   (* セパレータ *)
   | "("    { LPAREN }
   | ")"    { RPAREN }
-  | "{"    { LBRACE }
-  | "}"    { RBRACE }
-  | "["    { LBRACKET }
-  | "]"    { RBRACKET }
   | "."    { DOT }
-  | ","    { COMMA }
   | float_literal
            { CONST(CnRea(float_of_string(lexeme lexbuf))) }
   | ";"    { SEMI }
