@@ -59,4 +59,4 @@ PROGRAM = untyped
 .DEFAULT: $(OCamlProgram $(PROGRAM), $(FILES))
 
 clean:
-	rm *.cmo *.cmi *.exe *.run parser.mli parser.ml lexer.ml
+	rm -f *.cmo *.cmi $(PROGRAM) $(PROGRAM).exe *.run parser.mli parser.ml lexer.ml
