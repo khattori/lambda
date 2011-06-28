@@ -1,0 +1,13 @@
+#
+# sample program
+# use util.prog
+#
+use util;
+def fact  = fix (\\fact.\n.if (== n 0) 1 ( imul_ n (fact (isub_ n 1))));
+
+def even,odd =
+  let evenodd =
+    fix (\\eo.cons (\n.if (== n 0) true  (tl eo (isub_ n 1)))
+                   (\n.if (== n 0) false (hd eo (isub_ n 1))))
+  in 
+    hd evenodd,tl evenodd;

@@ -1,0 +1,23 @@
+def if    = \b.\\t1.\\t2.case b of true -> t1
+                                 | false -> t2
+                                 | ... -> (\x.error "if: type mismatch");
+
+def hd    = \ls.case ls of cons -> \x.\_.x;
+def tl    = \ls.case ls of cons -> \_.\y.y;
+
+def ==    = \t1.\t2.beq t1 t2 true false;
+def not   = \t.== t false;
+def andalso = \t1.\\t2.if t1 t2 false;
+def orelse  = \t1.\\t2.if t1 true t2;
+def !=    = \t1.\t2.beq t1 t2 false true;
+def >     = \t1.\t2.igt_ t1 t2 true false;
+def >=    = \t1.\t2.orelse (> t1 t2) (== t1 t2);
+def <     = \t1.\t2.igt_ t2 t1 true false;
+def <=    = \t1.\t2.orelse (< t1 t2) (== t1 t2);
+def min   = \t1.\t2.if (<= t1 t2) t1 t2;
+def max   = \t1.\t2.if (>= t1 t2) t1 t2;
+def fix   = \f.(\x.f (x x)) (\x.f (x x));
+
+def maxv = fix (\\maxv.\x.\y.if (== y nil) x (if (> x y) (maxv x) (maxv y)));
+def minv = fix (\\minv.\x.\y.if (== y nil) x (if (> x y) (minv y) (minv x)));
+
