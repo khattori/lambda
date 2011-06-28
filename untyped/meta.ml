@@ -1,4 +1,4 @@
-(** ƒƒ^ƒvƒƒOƒ‰ƒ~ƒ“ƒO‚Ì‚½‚ß‚Ìˆ— *)
+(** ãƒ¡ã‚¿ãƒ—ãƒ­ã‚°ãƒ©ãƒŸãƒ³ã‚°ã®ãŸã‚ã®å‡¦ç† *)
 
 open Absyn
 open Const
@@ -7,9 +7,9 @@ open Prims
 
 exception Ctor_parse of string
 
-(* ’ŠÛ\•¶–Ø‚Ìƒf[ƒ^’è‹` *)
+(* æŠ½è±¡æ§‹æ–‡æœ¨ã®ãƒ‡ãƒ¼ã‚¿å®šç¾© *)
 let _absyn_table = [
-  (* \•¶–Ø *)
+  (* æ§‹æ–‡æœ¨ *)
   (* type tm =      *)
   ( "tm_var", 1); (* | TmVar of int *)
   ( "tm_con", 2); (* | TmCon of const * term list *)
@@ -26,7 +26,7 @@ let _absyn_table = [
   (* and case = PatnCase of Const.t * term | DeflCase of term *)
   ( "ca_pat", 2);
   ( "ca_dfl", 1);
-  (* ’è”            type t =          *)
+  (* å®šæ•°            type t =          *)
   ( "cn_int", 1); (* | CnInt of int    *)
   ( "cn_rea", 1); (* | CnRea of float  *)
   ( "cn_str", 1); (* | CnStr of string *)
@@ -39,16 +39,16 @@ let _absyn_table = [
 let _ =
   List.iter (fun (s,arity) -> Const.add_ctor s arity) _absyn_table
 
-(* •Ï”‘©”›‚Ìƒf[ƒ^•\Œ»‚Ì’è‹` *)
+(* å¤‰æ•°æŸç¸›ã®ãƒ‡ãƒ¼ã‚¿è¡¨ç¾ã®å®šç¾© *)
 let bn_wild    = tm_sym "bn_wild" []
 let bn_eager x = tm_sym "bn_eager" [tm_str x]
 let bn_lazy  x = tm_sym "bn_lazy"  [tm_str x]
-(* ’è”€‚Ìƒf[ƒ^•\Œ»‚Ì’è‹` *)
+(* å®šæ•°é …ã®ãƒ‡ãƒ¼ã‚¿è¡¨ç¾ã®å®šç¾© *)
 let cn_int n   = tm_sym "cn_int" [tm_int n]
 let cn_rea r   = tm_sym "cn_rea" [tm_rea r]
 let cn_str s   = tm_sym "cn_str" [tm_str s]
 let cn_sym s   = tm_sym "cn_sym" [tm_str s]
-(* €‚Ìƒf[ƒ^•\Œ»‚Ì’è‹` *)
+(* é …ã®ãƒ‡ãƒ¼ã‚¿è¡¨ç¾ã®å®šç¾© *)
 let tm_var x        = tm_sym "tm_var" [tm_str x]
 let tm_con c vs     = tm_sym "tm_con" [c;vs]
 let tm_mem m        = tm_sym "tm_mem" [tm_int m]
@@ -61,12 +61,12 @@ let tm_rcd rs       = tm_sym "tm_rcd" [rs]
 let tm_lbl t l      = tm_sym "tm_lbl" [t;tm_str l]
 let tm_quo t        = tm_sym "tm_quo" [t]
 let tm_unq t        = tm_sym "tm_unq" [t]
-(* caseß‚Ìƒf[ƒ^•\Œ»‚Ì’è‹` *)
+(* caseç¯€ã®ãƒ‡ãƒ¼ã‚¿è¡¨ç¾ã®å®šç¾© *)
 let ca_pat c t = tm_sym "ca_pat" [c;t]
 let ca_dfl t   = tm_sym "ca_dfl" [t]
 
 
-(* •Ï”‘©”›‚©‚çƒf[ƒ^•\Œ»‚ð¶¬ *)
+(* å¤‰æ•°æŸç¸›ã‹ã‚‰ãƒ‡ãƒ¼ã‚¿è¡¨ç¾ã‚’ç”Ÿæˆ *)
 let bind_to_ctor b = match b with
   | Wild    -> bn_wild
   | Eager x -> bn_eager x
@@ -74,14 +74,14 @@ let bind_to_ctor b = match b with
 let binds_to_ctor bs = match bs with
   | [b] -> bind_to_ctor b
   | bs  -> TmTpl(List.map (fun b -> bind_to_ctor b) bs)
-(* ’è”€‚©‚çƒf[ƒ^•\Œ»‚ð¶¬ *)
+(* å®šæ•°é …ã‹ã‚‰ãƒ‡ãƒ¼ã‚¿è¡¨ç¾ã‚’ç”Ÿæˆ *)
 let con_to_ctor c = match c with
   | CnInt n -> cn_int n
   | CnRea r -> cn_rea r
   | CnStr s -> cn_str s
   | CnSym s -> cn_sym s
 
-(** €‚ðƒvƒƒOƒ‰ƒ€‚Åˆµ‚¦‚éƒf[ƒ^\‘¢‚É•ÏŠ· *)
+(** é …ã‚’ãƒ—ãƒ­ã‚°ãƒ©ãƒ ã§æ‰±ãˆã‚‹ãƒ‡ãƒ¼ã‚¿æ§‹é€ ã«å¤‰æ› *)
 let rec term_to_ctor ctx = function
   | TmVar x        -> tm_var (Context.index2name ctx x)
   | TmCon(c,vs)    -> tm_con (con_to_ctor c) (terms_to_ctor ctx vs)
@@ -116,7 +116,7 @@ and bdtms_to_ctor ctx = function
   | [bt] -> bdtm_to_ctor ctx bt
   | bdtms -> TmTpl(List.map (bdtm_to_ctor ctx) bdtms)
 
-(* ƒf[ƒ^•\Œ»‚©‚ç’è”€‚Ö‚Ì•ÏŠ· *)
+(* ãƒ‡ãƒ¼ã‚¿è¡¨ç¾ã‹ã‚‰å®šæ•°é …ã¸ã®å¤‰æ› *)
 let ctor_to_con c = match c with
   | TmCon(CnSym "cn_int",[TmCon(CnInt _ as n,_)]) -> n
   | TmCon(CnSym "cn_rea",[TmCon(CnRea _ as r,_)]) -> r
@@ -132,7 +132,7 @@ let ctor_to_binds bs = match bs with
   | TmTpl bs -> List.map ctor_to_bind bs
   | b        -> [ctor_to_bind b]
 
-(** ƒf[ƒ^\‘¢‚ð€‚É•ÏŠ· *)
+(** ãƒ‡ãƒ¼ã‚¿æ§‹é€ ã‚’é …ã«å¤‰æ› *)
 let rec ctor_to_term ctx = function
   | TmCon(CnSym "tm_var",[TmCon(CnStr x,[])]) ->
       TmVar(Context.name2index ctx x)

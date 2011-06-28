@@ -256,7 +256,8 @@ GCは未実装なので，refを使いまくると，いずれメモリが尽き
  C ::= def B = t    --- 大域変数の定義
      | data c/n     --- アリティnのデータコンストラクタcの定義
      | t            --- 式の評価
-     | ε           --- 空のコマンド
+     | use Ident    --- モジュールのインポート
+     | ε            --- 空のコマンド
 
 
 3.【Semantics】=================================================
@@ -393,7 +394,7 @@ unquo t式は，式tを評価した結果としてのデータ構造を，イン
 型付きλ計算の型推論を実装したものである．
 
 ---
-$ untyped util.prog list.prog typing.prog
+$ untyped typing.prog
 ...省略...
 Untyped Lambda Interpreter, version 0.0.1
 > type 0;
