@@ -71,7 +71,7 @@ let search_filepath mname =
 *)
 let load_file store fname =
   try
-    let ctx = Context.empty in
+    let init_ctx = Context.empty in
     let mname = fpath2mname fname in
     let infile = open_in fname in
     let lexbuf = Lexing.from_channel infile in
@@ -79,8 +79,8 @@ let load_file store fname =
         add_loading mname;
         Lexer.init lexbuf fname;
         let result = Parser.main Lexer.token lexbuf in
-        let cmds = result ctx in
-        let ctx = List.fold_left (Command.exec store) ctx cmds in
+        let cmds = result init_ctx in
+        let ctx = List.fold_left (Command.exec store) init_ctx cmds in
           Printf.printf "file '%s' loaded.\n" fname;
           close_in infile;
           add_loaded mname ctx;
@@ -89,7 +89,7 @@ let load_file store fname =
         Error.report lexbuf.lex_start_p e;
         del_loaded mname;
         close_in infile;
-        ctx
+        init_ctx
   with
     | Sys_error msg ->
         Printf.printf "Error: %s\n" msg; Context.empty
