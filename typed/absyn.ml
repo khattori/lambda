@@ -27,28 +27,46 @@ let const_to_string = function
   | CnStr s -> sprintf "%S" s
   | CnSym s -> s
 
+(** 型の定義 *)
+(*
+  T ::= t
+      | T -> T
+      | <t> => T
+*)
+type tycon =
+  | TyCArrow
+  | TyCSym of string
+type typ =
+  | TyVar of int
+  | TyMva of link ref
+  | TyCon of tycon * typ list
+  | TyAll of string * typ
+and link =
+  | NoLink of int (* rank *)
+  | LinkTo of node
+and node = { typ: typ; mutable mark: unit ref; mutable old: int }
+
 (** 項の定義 *)
 (*
   E ::= x (∈ Ident)
       | c v1 ... vn    ---  c(∈ Const)
       | m (∈ Address)
-      | \B.E
+      | \b:T.E
+      | \<t>.E
       | E1 E2
+      | E <T>
       | let B = E1 in E2
-      | case E of c1 -> E1 | ... -> En
-      | E1,...,En                         --- タプル
-      | { b1 = E1; ...; bn = En }         --- レコード
-      | E.l                               --- 要素参照 
-  b ::= l | \l | _     l (∈ Label) 
-  B ::= x | \x | _ | B,B 
+  b ::= x | \x | _
 *)
 type term =
   | TmVar of int
   | TmMem of int
   | TmCon of const * term list
-  | TmAbs of binder * term
+  | TmAbs of binder * typ option * term
+  | TmTbs of string * term
   | TmApp of term * term
-  | TmLet of binder * term * term
+  | TmTpp of term * typ
+  | TmLet of binder * typ option * term * term
 
 (** 項を文字列に変換する *)
 let rec to_string ctx tm =
@@ -62,20 +80,25 @@ let rec to_string ctx tm =
           (String.concat " " (List.map (to_string ctx) vs))
     | TmMem m -> sprintf "<%d>" m
     | TmAbs(b,tm) ->
-        let ctx',s = to_string_bind b in
+        let ctx',s = to_string_bind ctx b in
           sprintf "(\\%s.%s)" s (to_string ctx' tm)
     | TmApp(tm1,tm2) ->
         sprintf "(%s %s)" (to_string ctx tm1) (to_string ctx tm2)
     | TmLet(b,tm1,tm2) ->
-        let ctx',s = to_string_bind b in
+        let ctx',s = to_string_bind ctx b in
           sprintf "(let %s = %s in %s)"
             s (to_string ctx tm1) (to_string ctx' tm2)
 and to_string_bind ctx b = match b with
-  | Wild    -> "_"
-  | Eager x -> sprintf "%s" x
-  | Lazy  x -> sprintf "\\%s" x
-and to_string_binding ctx (b,tm) =
-  sprintf    "%s = %s" (to_string_bind ctx b) (to_string ctx tm)
+  | Wild -> (Context.add_bind ctx b),"_"
+  | Eager x -> Context.fresh_name ctx x
+  | Lazy x  ->
+      let ctx',x' = Context.fresh_name ctx x
+      in
+        ctx',sprintf "\\%s" x'
+and to_string_binding ctx (b,tm) = match b with
+  | Wild    -> sprintf    "_ = %s"   (to_string ctx tm)
+  | Eager x -> sprintf   "%s = %s" x (to_string ctx tm)
+  | Lazy  x -> sprintf "\\%s = %s" x (to_string ctx tm)
 
 (*
  * print: 抽象構文木の出力

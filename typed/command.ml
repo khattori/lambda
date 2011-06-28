@@ -29,14 +29,15 @@ let print_bind ctx b tm =
 let def_bind store ctx b tm = match b with
   | Wild ->
       let v = Core.eval ctx store tm in
-        print_bind ctx b v
+        print_bind ctx b v;
+        ctx
   | Eager x ->
       let v = Core.eval ctx store tm in
         print_bind ctx b v;
         Context.add_term ctx x v 1
   | Lazy x ->
       print_bind ctx b tm;
-      Context.add_term ctx' x tm 1
+      Context.add_term ctx x tm 1
 
 (* ロード関数のテーブル定義 *)
 type loader_t = {

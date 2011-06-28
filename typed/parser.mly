@@ -51,8 +51,8 @@ toplevel
 command
   : expression                    { fun ctx -> Eval($1 ctx),ctx        }
   | DEF binder EQ expression      { fun ctx ->
-                                      let b,ctx' = $2 ctx in
-                                        Defn(b,$4 ctx),ctx'            }
+                                      let ctx' = Context.add_bind ctx $2 in
+                                        Defn($2,$4 ctx),ctx'            }
   | USE IDENT                     { fun ctx ->
                                       let ctx' =
                                         Command.use_module $2 in
@@ -80,13 +80,13 @@ expression
   : apply_expression { $1 }
   | LET binder EQ expression IN expression {
       fun ctx ->
-        let b,ctx' = $2 ctx in
-          TmLet(b, $4 ctx, $6 ctx')
+        let ctx' = Context.add_bind ctx $2 in
+          TmLet($2, $4 ctx, $6 ctx')
     }
   | BACKSLASH binder DOT expression {
       fun ctx ->
-        let b,ctx' = $2 ctx in
-          TmAbs(b, $4 ctx')
+        let ctx' = Context.add_bind ctx $2 in
+          TmAbs($2, $4 ctx')
     }
 ;
 

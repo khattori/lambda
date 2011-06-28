@@ -41,7 +41,7 @@ let set_debug_mode () =
 
 (* バージョン情報表示 *)
 let print_version() =
-  Printf.printf "Untyped Lambda Interpreter, version 0.0.1\n"
+  Printf.printf "Typed Lambda Interpreter, version 0.0.1\n"
 
 (* 
  * add_file : ファイル一覧にファイル名を追加
@@ -59,7 +59,7 @@ let (
 
 (** メイン関数
 
-    Usage: untyped [opsions] [file]...
+    Usage: typed [opsions] [file]...
 
     デフォルトでは，引数で指定したファイルが読み込まれ，対話モードで動
     作する．

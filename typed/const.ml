@@ -42,11 +42,6 @@ let arity = function
 let rec is_value tm =
   let rec walk tm =
     match tm with
-      | TmTpl tms -> List.for_all is_value tms
-      | TmRcd bs ->
-          List.for_all
-            (fun (b,t) ->
-               match b with Wild | Eager _ -> is_value t | _ -> true) bs
       | TmCon(CnSym s,vs) -> (
             match List.assoc s !_table_ref with
               | Ctor _ -> true

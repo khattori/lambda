@@ -55,8 +55,6 @@ let rec eval_step ctx store tm =
         TmApp(TmAbs(b,tm2),eval_step ctx store tm1)
   | TmApp(TmAbs(Lazy _,tm2),tm1) ->
       term_subst_top tm2 tm1
-  | TmApp(TmAbs(b,tm2),tm1) ->
-      TmApp(TmAbs(b,tm2),eval_step ctx store tm1)
   | TmApp(TmCon(c,vs),tm1) when is_value tm1 ->
       if Const.arity c > List.length vs then
         TmCon(c,vs@[tm1])
