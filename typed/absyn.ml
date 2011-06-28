@@ -62,18 +62,20 @@ let rec to_string ctx tm =
           (String.concat " " (List.map (to_string ctx) vs))
     | TmMem m -> sprintf "<%d>" m
     | TmAbs(b,tm) ->
-        let ctx',s = to_string_binding ctx b in
+        let ctx',s = to_string_bind b in
           sprintf "(\\%s.%s)" s (to_string ctx' tm)
     | TmApp(tm1,tm2) ->
         sprintf "(%s %s)" (to_string ctx tm1) (to_string ctx tm2)
     | TmLet(b,tm1,tm2) ->
-        let ctx',s = to_string_binding ctx b in
+        let ctx',s = to_string_bind b in
           sprintf "(let %s = %s in %s)"
             s (to_string ctx tm1) (to_string ctx' tm2)
-and to_string_binding ctx (binder,tm) = match binder with
-  | Wild    -> sprintf    "_ = %s"   (to_string ctx tm)
-  | Eager x -> sprintf   "%s = %s" x (to_string ctx tm)
-  | Lazy  x -> sprintf "\\%s = %s" x (to_string ctx tm)
+and to_string_bind ctx b = match b with
+  | Wild    -> "_"
+  | Eager x -> sprintf "%s" x
+  | Lazy  x -> sprintf "\\%s" x
+and to_string_binding ctx (b,tm) =
+  sprintf    "%s = %s" (to_string_bind ctx b) (to_string ctx tm)
 
 (*
  * print: 抽象構文木の出力
