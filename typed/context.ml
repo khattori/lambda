@@ -18,12 +18,13 @@ type binder =
   | Lazy of string       (** 遅延評価される変数 *)
 
 (** 束縛エントリの種別定義 *)
-type 'a binding =
-  | NameBind             (** 変数名 *)
-  | TermBind of 'a * int (** 大域変数管理：項と同時束縛時のoffsetの組 *)
+type ('a,'b) binding =
+  | NameBind                  (** 変数名 *)
+  | TermBind of 'a * 'b * int (** 大域変数管理：項と型同時束縛時のoffsetの組 *)
+
 
 (** コンテクスト型の定義 *)
-type 'a t = (string * 'a binding) list
+type ('a,'b) t = (string * ('a,'b) binding) list
 
 (** 空のコンテクストを返す *)
 let empty = []
@@ -78,8 +79,8 @@ let rec fresh_name ctx x =
 
     @return 新しいコンテクスト
 *)
-let add_term ctx x tm o =
-  (x,TermBind(tm,o))::ctx
+let add_term ctx x tm ty o =
+  (x,TermBind(tm,ty,o))::ctx
 
 (** コンテクストを参照し，大域変数の定義を取得する
 
@@ -90,5 +91,10 @@ let add_term ctx x tm o =
 *)
 let get_term ctx x =
   match snd(List.nth ctx x) with
-    | TermBind(tm,o) -> tm,o
+    | TermBind(tm,_,o) -> tm,o
+    | _ -> assert false
+
+let get_typ ctx x =
+  match snd(List.nth ctx x) with
+    | TermBind(_,ty,o) -> tm,o
     | _ -> assert false

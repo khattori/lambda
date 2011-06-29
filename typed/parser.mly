@@ -81,12 +81,12 @@ expression
   | LET binder EQ expression IN expression {
       fun ctx ->
         let ctx' = Context.add_bind ctx $2 in
-          TmLet($2, $4 ctx, $6 ctx')
+          TmLet($2,None,$4 ctx,$6 ctx')
     }
   | BACKSLASH binder DOT expression {
       fun ctx ->
         let ctx' = Context.add_bind ctx $2 in
-          TmAbs($2, $4 ctx')
+          TmAbs($2,None,$4 ctx')
     }
 ;
 

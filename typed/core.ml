@@ -46,14 +46,14 @@ let rec eval_step ctx store tm =
       Prims.tm_error "*** no eval rule ***"
   | TmCon(CnSym d,vs) ->
       delta_reduc store d vs
-  | TmLet(b,tm1,tm2) ->
-      TmApp(TmAbs(b,tm2),tm1)
-  | TmApp(TmAbs((Eager _|Wild) as b,tm2),tm1) ->
+  | TmLet(b,topt,tm1,tm2) ->
+      TmApp(TmAbs(b,topt,tm2),tm1)
+  | TmApp(TmAbs((Eager _|Wild) as b,topt,tm2),tm1) ->
       if is_value tm1 then
         term_subst_top tm2 tm1
       else
-        TmApp(TmAbs(b,tm2),eval_step ctx store tm1)
-  | TmApp(TmAbs(Lazy _,tm2),tm1) ->
+        TmApp(TmAbs(b,topt,tm2),eval_step ctx store tm1)
+  | TmApp(TmAbs(Lazy _,_,tm2),tm1) ->
       term_subst_top tm2 tm1
   | TmApp(TmCon(c,vs),tm1) when is_value tm1 ->
       if Const.arity c > List.length vs then
