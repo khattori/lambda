@@ -152,29 +152,28 @@ let rec print ctx tm =
  * map: 項置換のための補助関数
  *
  *)
-let term_map onvar ontyp tm =
-  let rec walk c tm = match tm with
-    | TmVar x               -> onvar c x
-    | TmCon(cn,vs)          -> TmCon(cn,List.map (walk c) vs)
-    | TmAbs(b,None,tm')     -> TmAbs(b,None,walk (c + 1) tm')
-    | TmAbs(b,Some ty1,tm2) -> TmAbs(b,Some(ontype c ty1),walk (c + 1) tm2)
-    | TmApp(tm1,tm2)        -> TmApp(walk c tm1,walk c tm2)
-    | TmLet(b,None,tm1,tm2) -> TmLet(b,None,walk c tm1, walk (c + 1) tm2)
-    | TmLet(b,Some ty,tm1,tm2) ->
-        TmLet(b,Some(ontype c ty),walk c tm1, walk (c + 1) tm2)
-    | TmTbs(t,tm')          -> TmTbs(t,walk (c+1) tm')
-    | TmTpp(tm1,ty2)        -> TmTpp(walk c tm1,ontyp c ty2)
-  in
-    walk 0 tm
-
-let typ_map onvar ty =
+let typ_map onvar c ty =
   let rec walk c ty = match ty with
     | TyVar x       -> onvar c x
     | TyAll(t,ty')  -> TyAll(t,walk (c+1) ty')
     | TyCon(tc,tys) -> TyCon(tc,List.map (walk c) tys)
   in
-    walk 0 ty
+    walk c ty
 
+let term_map onvar ontyp c tm =
+  let rec walk c tm = match tm with
+    | TmVar x               -> onvar c x
+    | TmCon(cn,vs)          -> TmCon(cn,List.map (walk c) vs)
+    | TmAbs(b,None,tm')     -> TmAbs(b,None,walk (c+1) tm')
+    | TmAbs(b,Some ty1,tm2) -> TmAbs(b,Some(ontype c ty1),walk (c+1) tm2)
+    | TmApp(tm1,tm2)        -> TmApp(walk c tm1,walk c tm2)
+    | TmLet(b,None,tm1,tm2) -> TmLet(b,None,walk c tm1, walk (c+1) tm2)
+    | TmLet(b,Some ty,tm1,tm2) ->
+        TmLet(b,Some(ontype c ty),walk c tm1, walk (c+1) tm2)
+    | TmTbs(t,tm')          -> TmTbs(t,walk (c+1) tm')
+    | TmTpp(tm1,ty2)        -> TmTpp(walk c tm1,ontyp c ty2)
+  in
+    walk c tm
 
 (*
  * shift: シフト操作
@@ -186,15 +185,17 @@ let typ_map onvar ty =
  *   ↑d,c(let x = t1 in t2) = let x = ↑d,c(t1) in ↑d,c+1(t2)
  * 
  *)
-let term_shift d t =
-  term_map
-    (fun c x -> if x >= c then TmVar(x + d) else TmVar x)
-    t
-
-let typ_shift d ty =
+let typ_shift_above d c ty =
   typ_map
     (fun c x -> if x >= c then TyVar(x+d) else TyVar x)
-    ty
+    c ty
+let typ_shift d ty = typ_shift_above d 0 ty
+let term_shift_above d c tm =
+  term_map
+    (fun c x -> if x >= c then TmVar(x+d) else TmVar x)
+    (typ_shift_above d)
+    c tm
+let term_shift d tm = term_shift_above d 0 tm
 
 (*
  * subst: 置換操作
@@ -207,58 +208,31 @@ let typ_shift d ty =
  * 
  * 以下の実装では，shift操作を一気にやっている
  *)
-let term_subst j s t =
-  term_map
-    (fun c x -> if x == j + c then term_shift c s else TmVar x)
-    (fun c ty -> ty)
-    t
-
-\<X>.\x:X.x
-<X>=>X->X
-\<>.\:0.1
-<>=>0->0
-
-let typ_subst j s ty =
+let typ_subst j tyS tyT =
   typ_map
-    (fun c x -> if x == j + c then typ_shift c s else TyVar x)
-    ty
+    (fun c x -> if x == c then typ_shift c tyS else TyVar x)
+    j tyT
+let term_subst j tmS tmT =
+  term_map
+    (fun c x -> if x == c then term_shift c tmS else TmVar x)
+    (fun c ty -> ty)
+    j tmT
+let tytm_subst j tyS tmT =
+  term_map
+    (fun c x -> TmVar x)
+    (fun c tyT -> typ_subst c tyS tyT)
+    j TmT
 
 (*
  * subst_top: β簡約における置換
  * 
- *   (\x.t1) t2     → ↑-1,0([0:->↑1,0(t2)]t1)
+ *   (\x.t2) t1     → ↑-1,0([0:->↑1,0(t2)]t1)
  *   (<t>=>ty1) ty2 → ↑-1,0([0:->↑1,0(ty2)]ty1)
  *)
-(*
-let term_subst_top t1 t2 =
-  term_shift (-1) (term_subst 0 (term_shift 1 t2) t1)
-*)
-(*
 let typ_subst_top ty1 ty2 =
-  typ_shift (-1) (typ_subst 0 (typ_shift 1 ty2) ty1)
-*)
-(*
- * (\x.t1) t2 → σ0(t1,t2)
- * 
- * σn(m,t)     = m        if m < n
- * σn(n,t)     = ↑n,0(t)
- * σn(m,t)     = m-1      if m > n
- * σn(\.t',t)  = \.σn+1(t',t)
- * σn(t1 t2,t) = σn(t1,t) σn(t2,t)
- *)
-let term_subst_top t1 t2 =
-  term_map
-    (fun c x ->
-       if x < c then TmVar x
-       else if x == c then term_shift c t2
-       else TmVar(x - 1))
-    t1
-
-let typ_subst_top ty1 ty2 =
-  term_map
-    (fun c x ->
-       if x < c then TyVar x
-       else if x == c then typ_shift c ty2
-       else TyVar(x - 1))
-    ty1
+  typ_shift (-1) (typ_subst 0 (typ_shift 1 ty1) ty2)
+let term_subst_top tm1 tm2 =
+  term_shift (-1) (term_subst 0 (term_shift 1 tm1) tm2)
+let tytm_subst_top tyS tmT =
+  term_shfit (-1) (tytm_subst 0 (typ_shift 1 tyS) tmT)
 

@@ -48,12 +48,12 @@ let rec eval_step ctx store tm =
       delta_reduc store d vs
   | TmLet(b,topt,tm1,tm2) ->
       TmApp(TmAbs(b,topt,tm2),tm1)
-  | TmApp(TmAbs((Eager _|Wild) as b,topt,tm2),tm1) ->
+  | TmApp(TmAbs((Eager _|Wild) as b,topt,tm1),tm2) ->
       if is_value tm1 then
         term_subst_top tm2 tm1
       else
-        TmApp(TmAbs(b,topt,tm2),eval_step ctx store tm1)
-  | TmApp(TmAbs(Lazy _,_,tm2),tm1) ->
+        TmApp(TmAbs(b,topt,tm1),eval_step ctx store tm2)
+  | TmApp(TmAbs(Lazy _,_,tm1),tm2) ->
       term_subst_top tm2 tm1
   | TmApp(TmCon(c,vs),tm1) when is_value tm1 ->
       if Const.arity c > List.length vs then
@@ -68,6 +68,10 @@ let rec eval_step ctx store tm =
   | TmVar x ->
       let tm',o = Context.get_term ctx x in
         term_shift (x + o) tm'
+  | TmTpp(TmTbs(x,tm1),ty2) ->
+      tytm_subst_top ty2 tm1
+  | TmTpp(tm1,ty2) ->
+      TmTpp(eval_step ctx tm1,ty2)
   | _ -> Prims.tm_error "*** no eval rule ***"
 
 (** 項が値になるまで評価を行う *)

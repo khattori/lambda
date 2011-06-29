@@ -96,5 +96,5 @@ let get_term ctx x =
 
 let get_typ ctx x =
   match snd(List.nth ctx x) with
-    | TermBind(_,ty,o) -> tm,o
+    | TermBind(_,ty,o) -> ty,o
     | _ -> assert false
