@@ -13,30 +13,31 @@ let batch_mode_ref = ref false  (* -b *)
 
 let print_result ctx v ty =
   if not !batch_mode_ref then
-    Printf.printf "===> %s: %s\n" (to_string ctx v) (typ_to_string ctx ty)
+    Printf.printf "===> %s: %s\n"
+      (to_string (ctx,ctx) v) (typ_to_string ctx ty)
 
 let print_bind ctx b tm ty =
   if not !batch_mode_ref then
     Printf.printf "%s = %s: %s\n"
-      (binder_to_string b) (to_string ctx tm) (typ_to_string ctx ty)
+      (binder_to_string b) (to_string (ctx,ctx) tm) (typ_to_string ctx ty)
 
 
 (** 大域変数を定義する *)
 let def_bind store ctx b tm = match b with
   | Wild ->
-      let ty = Core.typing ctx tm in
-      let v = Core.eval ctx store tm in
+      let tm',ty = Core.typing ctx tm in
+      let v = Core.eval ctx store tm' in
         print_bind ctx b v ty;
         ctx
   | Eager x ->
-      let ty = Core.typing ctx tm in
-      let v = Core.eval ctx store tm in
+      let tm',ty = Core.typing ctx tm in
+      let v = Core.eval ctx store tm' in
         print_bind ctx b v ty;
         Context.add_term ctx x v ty 1
   | Lazy x ->
-      let ty = Core.typing ctx tm in
-        print_bind ctx b tm ty;
-        Context.add_term ctx x tm ty 1
+      let tm',ty = Core.typing ctx tm in
+        print_bind ctx b tm' ty;
+        Context.add_term ctx x tm' ty 1
 
 (* ロード関数のテーブル定義 *)
 type loader_t = {
@@ -71,8 +72,9 @@ let (
 let exec store ctx cmd =
   match cmd with
     | Eval tm ->
-        let ty = Core.typing ctx tm in
-        let v = Core.eval ctx store tm in
+        let tm',ty = Core.typing ctx tm in
+        let v = Core.eval ctx store tm' in
+          print_result ctx tm' ty;
           print_result ctx v ty;
           ctx
     | Defn(b,tm) ->

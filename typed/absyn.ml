@@ -94,7 +94,7 @@ let rec typ_to_string ctx = function
 
 let topt_to_string ctx = function
   | None -> ""
-  | Some ty -> sprintf ":%s" (typ_to_string ctx ty)
+  | Some ty -> sprintf ": %s" (typ_to_string ctx ty)
 
 (** 項の定義 *)
 (*
@@ -119,29 +119,31 @@ type term =
   | TmLet of binder * typ option * term * term
 
 (** 項を文字列に変換する *)
-let rec to_string ctx = function
+let rec to_string ((tmctx,tyctx) as ctxs) = function
   | TmVar x ->
-      sprintf "%s(%d)" (Context.index2name ctx x) x
+      sprintf "%s(%d)" (Context.index2name tmctx x) x
   | TmCon(cn,[]) -> const_to_string cn
   | TmCon(cn,vs) ->
       sprintf "(%s %s)"
         (const_to_string cn)
-        (String.concat " " (List.map (to_string ctx) vs))
+        (String.concat " " (List.map (to_string ctxs) vs))
   | TmMem m -> sprintf "<%d>" m
   | TmAbs(b,topt,tm) ->
-      let ctx',s = to_string_bind ctx b in
-        sprintf "(\\%s%s.%s)" s (topt_to_string ctx topt) (to_string ctx' tm)
+      let tmctx',s = to_string_bind tmctx b in
+        sprintf "(\\%s%s.%s)"
+          s (topt_to_string tyctx topt) (to_string (tmctx',tyctx) tm)
   | TmApp(tm1,tm2) ->
-      sprintf "(%s %s)" (to_string ctx tm1) (to_string ctx tm2)
+      sprintf "(%s %s)" (to_string ctxs tm1) (to_string ctxs tm2)
   | TmLet(b,topt,tm1,tm2) ->
-      let ctx',s = to_string_bind ctx b in
+      let tmctx',s = to_string_bind tmctx b in
         sprintf "(let %s%s = %s in %s)"
-          s (to_string ctx tm1) (topt_to_string ctx topt) (to_string ctx' tm2)
+          s (topt_to_string tyctx topt) (to_string ctxs tm1)
+          (to_string (tmctx',tyctx) tm2)
   | TmTbs(t,tm) ->
-      let ctx',s = Context.fresh_name ctx t in
-        sprintf "(\\<%s>.%s)" s (to_string ctx' tm)
+      let tyctx',s = Context.fresh_name tyctx t in
+        sprintf "(\\<%s>.%s)" s (to_string (tmctx,tyctx') tm)
   | TmTpp(tm1,ty2) ->
-      sprintf "(%s <%s>)" (to_string ctx tm1) (typ_to_string ctx ty2)
+      sprintf "(%s <%s>)" (to_string ctxs tm1) (typ_to_string tyctx ty2)
 
 and to_string_bind ctx = function
   | Wild as b -> (Context.add_bind ctx b),"_"
@@ -150,12 +152,6 @@ and to_string_bind ctx = function
       let ctx',x' = Context.fresh_name ctx x
       in
         ctx',sprintf "\\%s" x'
-
-(*
- * print: 抽象構文木の出力
- *)
-let rec print ctx tm =
-  print_string (to_string ctx tm)
 
 (* De Bruijin index *)
 (*

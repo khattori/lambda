@@ -47,7 +47,7 @@ let rec is_value tm =
               | Ctor _ -> true
               | Dtor a -> List.length vs < a
         )
-      | TmCon _ | TmMem _ | TmAbs _ -> true
+      | TmCon _ | TmMem _ | TmAbs _ | TmTbs _ -> true
       | _ -> false
   in
     walk tm
