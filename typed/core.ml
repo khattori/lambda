@@ -4,6 +4,9 @@ open Const
 open Context
 open Prims
 
+exception Unify_fail of link ref list
+exception Occur_check of link ref list
+
 (*
  * delta_reduc: δ簡約
  *)
@@ -43,13 +46,13 @@ let delta_reduc store d vs =
 let rec eval_step ctx store tm =
   match tm with
   | tm when is_value tm ->
-      Prims.tm_error "*** no eval rule ***"
+      ignore(Prims.tm_error "*** no eval rule ***")
   | TmCon(CnSym d,vs) ->
       delta_reduc store d vs
   | TmLet(b,topt,tm1,tm2) ->
       TmApp(TmAbs(b,topt,tm2),tm1)
   | TmApp(TmAbs((Eager _|Wild) as b,topt,tm1),tm2) ->
-      if is_value tm1 then
+      if is_value tm2 then
         term_subst_top tm2 tm1
       else
         TmApp(TmAbs(b,topt,tm1),eval_step ctx store tm2)
@@ -71,7 +74,7 @@ let rec eval_step ctx store tm =
   | TmTpp(TmTbs(x,tm1),ty2) ->
       tytm_subst_top ty2 tm1
   | TmTpp(tm1,ty2) ->
-      TmTpp(eval_step ctx tm1,ty2)
+      TmTpp(eval_step ctx store tm1,ty2)
   | _ -> Prims.tm_error "*** no eval rule ***"
 
 (** 項が値になるまで評価を行う *)
@@ -84,3 +87,121 @@ let eval ctx store tm =
       iter (eval_step ctx store tm)
   in
     iter tm
+
+let typ_of_const c vs =
+  match c with
+    | CnInt _ -> tint
+    | CnRea _ -> treal
+    | CnStr _ -> tstring
+    | CnSym s -> Prims.get_const_type s
+
+let generalize rank ty =
+  let id_ref = ref 0 in
+  let tyall_ref = ref (fun ty -> ty) in
+  let rec walk = function
+    | TyMva({contents=NoLink(r,_)} as link) when r >= rank ->
+        let id = !id_ref in
+        let tyall = !tyall_ref in
+        let ty = TyVar id in
+          tyall_ref := (fun ty' -> tyall(TyAll(Printf.sprintf "t%d" id,ty')));
+          link := link_to ty r;
+          incr id_ref;
+          ty
+    | TyMva{contents=LinkTo{typ=ty}} -> walk ty
+    | TyCon(tc,ts) -> TyCon(tc,List.map walk ts)
+    | ty -> ty
+  in
+    !tyall_ref (walk ty)
+
+let instanciate rank ty =
+  let rec walk ty = match ty with
+    | TyMva{contents=NoLink _} -> ty
+    | TyMva{contents=LinkTo{typ=ty}} -> walk ty
+    | TyCon(tc,ts) -> TyCon(tc,List.map walk ts)
+    | TyAll(x,ty) ->
+        walk (typ_subst_top (fresh_mvar rank) ty)
+    | _ -> assert false (* 自由なTyVarが出現した *)
+  in
+    walk ty
+
+let unify lrefs ty1 ty2 =
+  let rec walk ty1 ty2 =
+    let ty1 = repr ty1 and ty2 = repr ty2 in
+      if ty1 == ty2 then () else
+        match ty1,ty2 with
+          | TyMva({contents=NoLink(r1,_)} as l1),
+            TyMva({contents=NoLink(r2,_)} as l2) ->
+              if r1 > r2 then (
+                l1 := link_to ty2 r1;
+                lrefs := l1::!lrefs
+              ) else (
+                l2 := link_to ty1 r2;
+                lrefs := l2::!lrefs
+              )
+          | TyMva({contents=NoLink(r1,_)} as l1), _ ->
+              l1 := link_to ty2 r1;
+              lrefs := l1::!lrefs
+          | _, TyMva({contents=NoLink(r2,_)} as l2) ->
+              l2 := link_to ty1 r2;
+              lrefs := l2::!lrefs
+          | TyCon(tc1,tys1),TyCon(tc2,tys2) when tc1 = tc2 ->
+              List.iter2 walk tys1 tys2
+          | _, _ ->
+              raise (Unify_fail !lrefs)
+  in
+    walk ty1 ty2
+
+let occur_check lrefs ty =
+  let visiting = mark() and visited = mark() in
+  let rec walk ty =
+    match ty with
+      | TyMva{contents=LinkTo{mark=mk}} when mk == visiting ->
+          raise (Occur_check !lrefs)
+      | TyMva{contents=LinkTo{mark=mk}} when mk == visited -> ()
+      | TyMva{contents=LinkTo({typ=ty} as node)} ->
+          node.mark <- visiting;
+          walk ty;
+          node.mark <- visited
+      | TyCon(_,tys) -> List.iter walk tys
+      | _ -> ()
+  in walk ty
+
+(** 型付けを行う *)
+let typeof ctx tm =
+  let lrefs = ref [] in
+  let rec walk ctx rank = function
+    | TmVar x ->
+        instanciate rank (Context.get_typ ctx x)
+    | TmCon(c,vs) ->
+        instanciate rank (typ_of_const c vs)
+    | TmAbs(b,topt,tm) ->
+        let ty1 = fresh_mvar rank in
+        let ctx' = Context.add_type ctx b ty1 in
+        let ty2 = walk ctx' rank tm in
+          tarrow ty1 ty2
+    | TmApp(tm1,tm2) ->
+        let ty = fresh_mvar rank in
+        let ty1 = walk ctx rank tm1 in
+        let ty2 = walk ctx rank tm2 in
+          unify lrefs ty1 (tarrow ty2 ty);
+          occur_check lrefs ty1;
+          ty
+    | TmLet(b,topt,tm1,tm2) ->
+        let ty1 = walk ctx (rank + 1) tm1 in
+        let ty1 = if is_syntactic_value tm1 || is_lazy b then
+          generalize (rank + 1) ty1
+        else
+          ty1
+        in
+        let ctx' = Context.add_type ctx b ty1 in
+          walk ctx' rank tm2
+    | _ -> assert false
+  in
+    walk ctx 0 tm
+
+let typing ctx tm =
+  let ty = typeof ctx tm in
+    if is_syntactic_value tm then generalize 0 ty
+    else ty
+
+

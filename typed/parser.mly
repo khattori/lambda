@@ -29,8 +29,8 @@
 %nonassoc DOT
 
 %start main toplevel
-%type <Absyn.term Context.t -> Command.t list> main
-%type <Absyn.term Context.t -> Command.t> toplevel
+%type <(Absyn.term, Absyn.typ) Context.t -> Command.t list> main
+%type <(Absyn.term, Absyn.typ) Context.t -> Command.t> toplevel
 %%
 
 /* バッチモード時のメイン */
@@ -104,5 +104,5 @@ atomic_expression
                                         TmVar(Context.name2index ctx s) }
   | CONST                       { fun ctx -> TmCon($1,[]) }
   | LPAREN expression RPAREN    { $2 }
-  | LPAREN RPAREN               { fun ctx -> Prims.nil }
+  | LPAREN RPAREN               { fun ctx -> Prims.tm_unit }
 ;

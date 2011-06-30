@@ -7,6 +7,8 @@
 open Absyn
 open Const
 
+let tm_unit  = TmCon(CnSym "unit",[])
+
 let tm_error msg = TmCon(CnSym "error",[TmCon(CnStr msg,[])])
 let tm_error_wrong_argument_type s =
   tm_error (s ^ ": wrong argument type")
@@ -49,7 +51,7 @@ let itos_ store cs = match cs with
   | [TmCon(CnInt n,_)] -> tm_str(string_of_int n)
   | _ -> tm_error_wrong_argument_type "itos_"
 let outs_ store cs = match cs with
-  | [TmCon(CnStr s,_)] -> print_string s; tm_str(s)
+  | [TmCon(CnStr s,_)] -> print_string s; tm_unit
   | _ -> tm_error_wrong_argument_type "outs_"
 let mtos_ store cs = match cs with
   | [TmMem n] -> tm_str("<" ^ string_of_int n ^ ">")
@@ -89,48 +91,64 @@ let exit_ store cs = match cs with
   | _ -> assert false
 
 (** プリミティブの定義 *)
+
+(* 型コンストラクタ *)
+let _ttor_table = [
+  ( "Void",    0 );
+  ( "Unit",    0 );
+  ( "Int",     0 );
+  ( "String",  0 );
+  ( "Real",    0 );
+  ( "Bool",    0 );
+  ( "Ref",     1 );
+]
+let tvoid   = TyCon(TyCSym "Void",[])
+let tunit   = TyCon(TyCSym "Unit",[])
+let tbool   = TyCon(TyCSym "Bool",[])
+let tint    = TyCon(TyCSym "Int",[])
+let treal   = TyCon(TyCSym "Real",[])
+let tstring = TyCon(TyCSym "String",[])
+let tref ty = TyCon(TyCSym "Ref",[ty])
 (* コンストラクタ *)
 let _ctor_table = [
-  ( "nil",   0 );
-  ( "cons",  2 );
-  ( "true",  0 );
-  ( "false", 0 );
+  ( "unit",  (0, tunit) );
+  ( "true",  (0, tbool) );
+  ( "false", (0, tbool) );
 ]
-
-(* リスト生成用関数 *)
-let nil  = TmCon(CnSym "nil",[])
-let cons x y = TmApp(TmApp(TmCon(CnSym "cons",[]),x),y)
-let rec list = function
-  | [] -> nil
-  | x::xs -> cons x (list xs)
 
 (* デストラクタ *)
 let _dtor_table = [
-  ( "iadd_", (2, iadd_)  );
-  ( "isub_", (2, isub_)  );
-  ( "imul_", (2, imul_)  );
-  ( "idiv_", (2, idiv_)  );
-  ( "imod_", (2, imod_)  );
-  ( "itos_", (1, itos_)  );
-  ( "mtos_", (1, mtos_)  );
-  ( "scat_", (2, scat_)  );
-  ( "outs_", (1, outs_)  );
-  ( "igt_",  (4, igt_)   );
-  ( "ref",   (1, ref_)   );
-  ( "!",     (1, drf_)   );
-  ( ":=",    (2, asn_)   );
-  ( "beq",   (4, beq_)   );
+  ( "iadd_", (2, iadd_, tarrows[tint;tint;tint]) );
+  ( "isub_", (2, isub_, tarrows[tint;tint;tint]) );
+  ( "imul_", (2, imul_, tarrows[tint;tint;tint]) );
+  ( "idiv_", (2, idiv_, tarrows[tint;tint;tint]) );
+  ( "imod_", (2, imod_, tarrows[tint;tint;tint]) );
+  ( "itos_", (1, itos_, tarrow tint tstring )   );
+  ( "mtos_", (1, mtos_, TyAll("t",tarrow (tref(TyVar 0)) tstring)) );
+  ( "scat_", (2, scat_, tarrows[tstring;tstring;tstring]) );
+  ( "outs_", (1, outs_, tarrow tstring tunit)  );
+  ( "igt_",  (4, igt_,  TyAll("t",tarrows[tint;tint;TyVar 0;TyVar 0;TyVar 0])) );
+  ( "ref",   (1, ref_,  TyAll("t",tarrow (TyVar 0) (tref(TyVar 0))))   );
+  ( "!",     (1, drf_,  TyAll("t",tarrow (tref(TyVar 0)) (TyVar 0)))   );
+  ( ":=",    (2, asn_,  TyAll("t",tarrows[tref(TyVar 0);TyVar 0;TyVar 0]))   );
+  ( "beq_",  (4, beq_,  TyAll("t0",TyAll("t1",tarrows[TyVar 0;TyVar 0;TyVar 1;TyVar 1;TyVar 1])))   );
 (*  ( "fix",   (1, fix_)   ); *)
-  ( "exit",  (0, exit_)  );
-  ( "error", (1, error_) );
+  ( "exit",  (0, exit_, tvoid)  );
+  ( "error", (1, error_, tarrow tstring tvoid) );
 ]
 
 (* デストラクタの関数を取得 *)
 let get_dtor_fun d =
-  snd(List.assoc d _dtor_table)
+  let _,f,_ = List.assoc d _dtor_table in f
 
 (* 定数シンボルテーブルに登録 *)
 let _ =
-  List.iter (fun (s,arity)     -> Const.add_ctor s arity) _ctor_table;
-  List.iter (fun (s,(arity,_)) -> Const.add_dtor s arity) _dtor_table
+  List.iter (fun (s,(arity,_))   -> Const.add_ctor s arity) _ctor_table;
+  List.iter (fun (s,(arity,_,_)) -> Const.add_dtor s arity) _dtor_table
 
+let typ_table =
+  List.map (fun (s,(_,t)) -> s,t) _ctor_table
+    @ List.map (fun (s,(_,_,t)) -> s,t) _dtor_table
+
+let get_const_type s =
+  List.assoc s typ_table

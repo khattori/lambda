@@ -17,9 +17,16 @@ type binder =
   | Eager of string      (** 先行評価される変数 *)
   | Lazy of string       (** 遅延評価される変数 *)
 
+let is_lazy = function Lazy _ -> true | _ -> false
+let binder_to_string = function
+  | Wild    -> "_"
+  | Eager x -> Printf.sprintf "%s" x
+  | Lazy x  -> Printf.sprintf "\\%s" x
+
 (** 束縛エントリの種別定義 *)
 type ('a,'b) binding =
   | NameBind                  (** 変数名 *)
+  | TypeBind of 'b
   | TermBind of 'a * 'b * int (** 大域変数管理：項と型同時束縛時のoffsetの組 *)
 
 
@@ -82,6 +89,10 @@ let rec fresh_name ctx x =
 let add_term ctx x tm ty o =
   (x,TermBind(tm,ty,o))::ctx
 
+let add_type ctx b ty = match b with
+  | Wild             -> ("_",TypeBind ty)::ctx
+  | Eager x | Lazy x -> (x,  TypeBind ty)::ctx
+
 (** コンテクストを参照し，大域変数の定義を取得する
 
     @param ctx コンテクスト
@@ -96,5 +107,6 @@ let get_term ctx x =
 
 let get_typ ctx x =
   match snd(List.nth ctx x) with
-    | TermBind(_,ty,o) -> ty,o
+    | TermBind(_,ty,_) -> ty
+    | TypeBind ty -> ty
     | _ -> assert false

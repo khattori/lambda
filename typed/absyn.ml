@@ -41,16 +41,31 @@ type typ =
   | TyVar of int
   | TyMva of link ref
   | TyCon of tycon * typ list
-  | TyFun of string * typ
+  | TyAll of string * typ
 and link =
   | NoLink of int * int (* rank * id *)
   | LinkTo of node
 and node = { typ: typ; mutable mark: unit ref; mutable old: int }
 
+let tarrow ty1 ty2 = TyCon(TyCArr,[ty1;ty2])
+let tarrows tys =
+  let rec iter = function
+    | [ty] -> ty
+    | t::ts -> tarrow t (iter ts)
+    | [] -> assert false
+  in
+    iter tys
+
 let mark() = ref ()
 let no_mark = mark()
 let no_rank = -1
 let link_to ty rank = LinkTo{ typ = ty; mark = no_mark; old = rank }
+
+let fresh_mvar =
+  let _id_ref = ref 0 in
+    fun rank ->
+      let mvar = TyMva(ref (NoLink(rank,!_id_ref))) in
+        incr _id_ref; mvar
 
 (* パス圧縮を行う *)
 let rec repr ty =
@@ -75,10 +90,11 @@ let rec typ_to_string ctx = function
   | TyAll(x,ty) ->
       let ctx',s = Context.fresh_name ctx x in
         sprintf "('%s => %s)" s (typ_to_string ctx' ty)
+  | _ -> assert false
 
 let topt_to_string ctx = function
   | None -> ""
-  | Some ty -> sprintf ":%s" typ_to_string ctx ty
+  | Some ty -> sprintf ":%s" (typ_to_string ctx ty)
 
 (** 項の定義 *)
 (*
@@ -103,43 +119,37 @@ type term =
   | TmLet of binder * typ option * term * term
 
 (** 項を文字列に変換する *)
-let rec to_string ctx tm =
-  match tm with
-    | TmVar x ->
-        sprintf "%s(%d)" (Context.index2name ctx x) x
-    | TmCon(cn,[]) -> const_to_string cn
-    | TmCon(cn,vs) ->
-        sprintf "(%s %s)"
-          (const_to_string cn)
-          (String.concat " " (List.map (to_string ctx) vs))
-    | TmMem m -> sprintf "<%d>" m
-    | TmAbs(b,topt,tm) ->
-        let ctx',s = to_string_bind ctx b in
-          sprintf "(\\%s%s.%s)" s (topt_to_string ctx topt) (to_string ctx' tm)
-    | TmApp(tm1,tm2) ->
-        sprintf "(%s %s)" (to_string ctx tm1) (to_string ctx tm2)
-    | TmLet(b,topt,tm1,tm2) ->
-        let ctx',s = to_string_bind ctx b in
-          sprintf "(let %s%s = %s in %s)"
-            s (to_string ctx tm1) (topt_to_string ctx topt)
-            (to_string ctx' tm2)
-    | TmTbs(t,tm) ->
-        let ctx',s = Context.fresh_name ctx t in
-          sprintf "(\\<%s>.%s)" s (to_string ctx' tm)
-    | TmTpp(tm1,ty2) ->
-        sprintf "(%s <%s>)" (to_string ctx tm1) (typ_to_string ctx ty2)
+let rec to_string ctx = function
+  | TmVar x ->
+      sprintf "%s(%d)" (Context.index2name ctx x) x
+  | TmCon(cn,[]) -> const_to_string cn
+  | TmCon(cn,vs) ->
+      sprintf "(%s %s)"
+        (const_to_string cn)
+        (String.concat " " (List.map (to_string ctx) vs))
+  | TmMem m -> sprintf "<%d>" m
+  | TmAbs(b,topt,tm) ->
+      let ctx',s = to_string_bind ctx b in
+        sprintf "(\\%s%s.%s)" s (topt_to_string ctx topt) (to_string ctx' tm)
+  | TmApp(tm1,tm2) ->
+      sprintf "(%s %s)" (to_string ctx tm1) (to_string ctx tm2)
+  | TmLet(b,topt,tm1,tm2) ->
+      let ctx',s = to_string_bind ctx b in
+        sprintf "(let %s%s = %s in %s)"
+          s (to_string ctx tm1) (topt_to_string ctx topt) (to_string ctx' tm2)
+  | TmTbs(t,tm) ->
+      let ctx',s = Context.fresh_name ctx t in
+        sprintf "(\\<%s>.%s)" s (to_string ctx' tm)
+  | TmTpp(tm1,ty2) ->
+      sprintf "(%s <%s>)" (to_string ctx tm1) (typ_to_string ctx ty2)
 
-and to_string_bind ctx b = match b with
-  | Wild -> (Context.add_bind ctx b),"_"
-  | Eager x -> Context.fresh_name ctx x
-  | Lazy x  ->
+and to_string_bind ctx = function
+  | Wild as b -> (Context.add_bind ctx b),"_"
+  | Eager x   -> Context.fresh_name ctx x
+  | Lazy x    ->
       let ctx',x' = Context.fresh_name ctx x
       in
         ctx',sprintf "\\%s" x'
-and to_string_binding ctx (b,tm) = match b with
-  | Wild    -> sprintf    "_ = %s"   (to_string ctx tm)
-  | Eager x -> sprintf   "%s = %s" x (to_string ctx tm)
-  | Lazy  x -> sprintf "\\%s = %s" x (to_string ctx tm)
 
 (*
  * print: 抽象構文木の出力
@@ -157,19 +167,22 @@ let typ_map onvar c ty =
     | TyVar x       -> onvar c x
     | TyAll(t,ty')  -> TyAll(t,walk (c+1) ty')
     | TyCon(tc,tys) -> TyCon(tc,List.map (walk c) tys)
+    | TyMva{contents=NoLink _} -> ty
+    | TyMva{contents=LinkTo{typ=ty}} -> walk c ty
   in
     walk c ty
 
 let term_map onvar ontyp c tm =
   let rec walk c tm = match tm with
     | TmVar x               -> onvar c x
+    | TmMem _               -> tm
     | TmCon(cn,vs)          -> TmCon(cn,List.map (walk c) vs)
     | TmAbs(b,None,tm')     -> TmAbs(b,None,walk (c+1) tm')
-    | TmAbs(b,Some ty1,tm2) -> TmAbs(b,Some(ontype c ty1),walk (c+1) tm2)
+    | TmAbs(b,Some ty1,tm2) -> TmAbs(b,Some(ontyp c ty1),walk (c+1) tm2)
     | TmApp(tm1,tm2)        -> TmApp(walk c tm1,walk c tm2)
     | TmLet(b,None,tm1,tm2) -> TmLet(b,None,walk c tm1, walk (c+1) tm2)
     | TmLet(b,Some ty,tm1,tm2) ->
-        TmLet(b,Some(ontype c ty),walk c tm1, walk (c+1) tm2)
+        TmLet(b,Some(ontyp c ty),walk c tm1, walk (c+1) tm2)
     | TmTbs(t,tm')          -> TmTbs(t,walk (c+1) tm')
     | TmTpp(tm1,ty2)        -> TmTpp(walk c tm1,ontyp c ty2)
   in
@@ -221,7 +234,7 @@ let tytm_subst j tyS tmT =
   term_map
     (fun c x -> TmVar x)
     (fun c tyT -> typ_subst c tyS tyT)
-    j TmT
+    j tmT
 
 (*
  * subst_top: β簡約における置換
@@ -234,5 +247,11 @@ let typ_subst_top ty1 ty2 =
 let term_subst_top tm1 tm2 =
   term_shift (-1) (term_subst 0 (term_shift 1 tm1) tm2)
 let tytm_subst_top tyS tmT =
-  term_shfit (-1) (tytm_subst 0 (typ_shift 1 tyS) tmT)
+  term_shift (-1) (tytm_subst 0 (typ_shift 1 tyS) tmT)
 
+(*
+ * is_syntactic_value: 項がsyntacticな値かどうか判定
+ *)
+let is_syntactic_value = function
+  | TmCon _ | TmAbs _ | TmMem _ -> true
+  | _ -> false
