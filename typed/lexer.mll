@@ -11,10 +11,14 @@
   exception Unterminated_string
 
   let keyword_table = [
+    ( "data",  DATA  );
     ( "def",   DEF   );
     ( "use",   USE   );
     ( "let",   LET   );
     ( "in",    IN    );
+    ( "case",  CASE  );
+    ( "over",  OVER  );
+    ( "of",    OF    );
   ]
 
   let init lexbuf fname =
@@ -23,7 +27,16 @@
       pos_lnum = 1;
       pos_bol = 0;
       pos_cnum = 0;
-    }
+   }
+
+  let ident_token s =
+    if Const.is_symbol s then
+      CONST(CnSym s)
+    else Type.is_const s then
+      TCONST(TyCSym s)
+    else
+      IDENT s
+
 }
 
 let space = [' ' '\t']
@@ -57,19 +70,27 @@ rule token = parse
           if List.mem_assoc s keyword_table then
             List.assoc s keyword_table
           else
-            IDENT s
+            ident_token s
       }
+  | "|"    { VBAR }
+  | "->"   { RARROW }
+  | "..."  { DDDOT }
   | "="    { EQ }
   | "#" nonnl* newline
            { new_line lexbuf; token lexbuf }
   | operator_char+
-           { IDENT(lexeme lexbuf) }
+           { ident_token(lexeme lexbuf) }
   | num    { CONST(CnInt(int_of_string(lexeme lexbuf))) }
   | "\\"   { BACKSLASH }
   (* セパレータ *)
   | "("    { LPAREN }
   | ")"    { RPAREN }
+  | "{"    { LBRACE }
+  | "}"    { RBRACE }
+  | "["    { LBRACKET }
+  | "]"    { RBRACKET }
   | "."    { DOT }
+  | ","    { COMMA }
   | float_literal
            { CONST(CnRea(float_of_string(lexeme lexbuf))) }
   | ";"    { SEMI }

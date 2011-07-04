@@ -4,6 +4,7 @@
 open ListAux
 open Printf
 open Context
+open Type
 
 exception Parse_error
 exception Multiple_labels of string
@@ -27,96 +28,53 @@ let const_to_string = function
   | CnStr s -> sprintf "%S" s
   | CnSym s -> s
 
-(** 型の定義 *)
-(*
-  T ::= t
-      | k T1...Tn
-      | T -> T
-      | <t> => T
-*)
-type tycon =
-  | TyCArr
-  | TyCSym of string
-type typ =
-  | TyVar of int
-  | TyMva of link ref
-  | TyCon of tycon * typ list
-  | TyAll of string * typ
-and link =
-  | NoLink of int * int (* rank * id *)
-  | LinkTo of node
-and node = { typ: typ; mutable mark: unit ref; mutable old: int }
-
-let tarrow ty1 ty2 = TyCon(TyCArr,[ty1;ty2])
-let tarrows tys =
-  let rec iter = function
-    | [ty] -> ty
-    | t::ts -> tarrow t (iter ts)
-    | [] -> assert false
-  in
-    iter tys
-
-let mark() = ref ()
-let no_mark = mark()
-let no_rank = -1
-let link_to ty rank = LinkTo{ typ = ty; mark = no_mark; old = rank }
-
-let fresh_mvar =
-  let _id_ref = ref 0 in
-    fun rank ->
-      let mvar = TyMva(ref (NoLink(rank,!_id_ref))) in
-        incr _id_ref; mvar
-
-(* パス圧縮を行う *)
-let rec repr ty =
-  match ty with
-    | TyMva({contents=LinkTo{typ=ty;old=rank}} as link) ->
-        let ty = repr ty in link := link_to ty rank; ty
-    | _ -> ty
-
-(** 型を文字列に変換する *)
-let rec typ_to_string ctx = function
-  | TyVar x ->
-      sprintf "'%s(%d)" (Context.index2name ctx x) x
-  | TyMva{contents=NoLink(r,id)} ->
-      sprintf "'X<%d>" id
-  | TyMva{contents=LinkTo{typ=ty}} ->
-      typ_to_string ctx ty
-  | TyCon(TyCSym s,[]) -> s
-  | TyCon(TyCSym s,ts) ->
-      sprintf "(%s %s)" s (String.concat " " (List.map (typ_to_string ctx) ts))
-  | TyCon(TyCArr,[ty1;ty2]) ->
-      sprintf "(%s -> %s)" (typ_to_string ctx ty1) (typ_to_string ctx ty2)
-  | TyAll(x,ty) ->
-      let ctx',s = Context.fresh_name ctx x in
-        sprintf "('%s => %s)" s (typ_to_string ctx' ty)
-  | _ -> assert false
-
-let topt_to_string ctx = function
-  | None -> ""
-  | Some ty -> sprintf ": %s" (typ_to_string ctx ty)
-
 (** 項の定義 *)
 (*
-  E ::= x (∈ Ident)
-      | c v1 ... vn    ---  c(∈ Const)
-      | m (∈ Address)
-      | \b:T.E
-      | \<t>.E
+  T ::= Type.t
+      | typeof E
+  E ::= x                     (x∈Ident)
+      | c v1 ... vn           (c∈Const)
+      | m                     (m∈Address)
+      | \Bs.E
       | E1 E2
+      | let Bs = E1 in E2
+      | E1,...,En
+      | { l1=E1;...;ln=En }   (l∈Label)
+      | E.l
+      | case E of Cs
+      | E:T
+      | \<t>.E
       | E <T>
-      | let B = E1 in E2
+      | over T of Ks
+  Cs ::= c1 -> E1 |...| cn -> En
+       | c1 -> E1 |...| cn -> En | ... -> E
+  Bs ::= b
+       | b1,...,bn        n ≧ 2
+       | b1,...,bn ...    n ≧ 2
   b ::= x | \x | _
+  Ks ::= T1 => E1 |...| Tn => En
+       | T1 => E1 |...| Tn => En | ... -> E
+  
 *)
 type term =
   | TmVar of int
   | TmMem of int
   | TmCon of const * term list
-  | TmAbs of binder * typ option * term
-  | TmTbs of string * term
+  | TmAbs of (binder * typ option) list * term
   | TmApp of term * term
+  | TmLet of (binder * typ option) list * term * term
+  | TmTpl of term list
+  | TmRcd of (binder * term) list
+  | TmSel of term * string
+  | TmCas of term * case list
+  | TmAsc of term * typ
+  | TmTbs of string * term
   | TmTpp of term * typ
-  | TmLet of binder * typ option * term * term
+  | TmOvr of typ * over list
+and case =
+  | CsPat of const * term
+  | CsDef of term
+and over = typ option * term
 
 (** 項を文字列に変換する *)
 let rec to_string ((tmctx,tyctx) as ctxs) = function
@@ -143,7 +101,7 @@ let rec to_string ((tmctx,tyctx) as ctxs) = function
       let tyctx',s = Context.fresh_name tyctx t in
         sprintf "(\\<%s>.%s)" s (to_string (tmctx,tyctx') tm)
   | TmTpp(tm1,ty2) ->
-      sprintf "(%s <%s>)" (to_string ctxs tm1) (typ_to_string tyctx ty2)
+      sprintf "(%s <%s>)" (to_string ctxs tm1) (Type.to_string tyctx ty2)
 
 and to_string_bind ctx = function
   | Wild as b -> (Context.add_bind ctx b),"_"

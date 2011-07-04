@@ -3,10 +3,12 @@ open Absyn
 
 (* コマンド定義 *)
 type t =
-  | Defn of binder * term
+  | Defn of binder list * term
+  | Data of string * string list * ctor list
   | Eval of term
-  | Use  of string * (term, typ) Context.t
+  | Use  of string
   | Noop
+and ctor = string * typ list
 
 (* バッチモード設定 *)
 let batch_mode_ref = ref false  (* -b *)

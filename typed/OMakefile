@@ -46,6 +46,7 @@ FILES[] =
 	main
 	prims
 	store
+	type
 	lexer
 	parser
 
