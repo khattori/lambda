@@ -1,3 +1,13 @@
+(** 型定義 *)
+(*
+  T ::= t
+      | k T...T 　　　　
+      | T -> T
+      | T,...,T
+      | { l:T;...;l:T }
+  S ::= T 
+      | \/t.S
+*)
 open Printf
 
 type tyc =
@@ -40,7 +50,7 @@ let fresh_mvar =
         incr id_ref_;
         mvar
 
-(* パス圧縮を行う *)
+(* パス圧縮 *)
 let rec repr = function
   | TyMva({contents=LinkTo{typ=ty;old=rank}} as link) ->
       let ty = repr ty in link := link_to ty rank; ty

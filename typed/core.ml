@@ -188,7 +188,7 @@ let typeof ctxs tm =
     | TmCon(c,vs) as tm ->
         tm,snd(instanciate rank tm (typ_of_const c vs))
     | TmAbs(bs,tm) ->
-        let tmctx',bs',ty1 = Context.add_types tmctx rank bs in
+        let tmctx',bs',ty1 = Context.add_bindtypes tmctx rank bs in
         let tm',ty2 = walk (tmctx',tyctx) rank tm in
           TmAbs(bs',tm'),tarrow ty1 ty2
     | TmApp(tm1,tm2) ->
@@ -198,6 +198,12 @@ let typeof ctxs tm =
           unify lrefs ty1 (tarrow ty2 ty);
           occur_check lrefs ty1;
           TmApp(tm1,tm2),ty
+(*
+let x,y,z = (\[T].\x:T.x,\[T].\x:T.x,\[T].\x:T.x)
+let x = \[T1].\[T2].\[T3].(\x:T1.x,\x:T2.x,\x:T3.x)
+fst (x [T1] [T2] [T3])
+*)
+
     | TmLet(bs,tm1,tm2) ->
         let tm1',ty1 = walk ctx (rank + 1) tm1 in
         let tm1',ty1 = if is_syntactic_value tm1 || is_lazy b then
@@ -205,9 +211,9 @@ let typeof ctxs tm =
         else
           tm1',ty1
         in
-        let ctx' = Context.add_type ctx b ty1 in
+        let tmctx',bs'',_ = Context.add_bindtypes tmctx rank bs' in
         let tm2',ty2 = walk ctx' rank tm2 in
-          TmLet(b,Some ty1,tm1',tm2'),ty2
+          TmLet(bs'',tm1',tm2'),ty2
     | _ -> assert false
   in
     walk ctxs 0 tm

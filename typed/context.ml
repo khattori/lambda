@@ -73,7 +73,6 @@ let add_binds ctx bs =
     List.check_dup (fun s -> raise (Multiple_names s)) xs;
     List.fold_left add_bind ctx bs
 
-
 (** 変数名をコンテクストに追加する．
 
     既に，同じ名前がコンテクストに登録されていた場合，名前の付け替えを
@@ -98,16 +97,25 @@ let rec fresh_name ctx x =
 let add_term ctx x tm ty o =
   (x,TermBind(tm,ty,o))::ctx
 
-let add_type ctx (b,topt) ty = match b with
-  | Wild             -> ("_",TypeBind ty)::ctx
-  | Eager x | Lazy x -> (x,  TypeBind ty)::ctx
-let add_types ctx rank bs = match bs with
+let add_bindtype ctx (b,topt) =
+  let ty = match topt with
+    | None -> fresh_mvar rank
+    | Some ty -> ty
+  in ((match b with
+         | Wild             -> ("_",TypeBind ty)::ctx
+         | Eager x | Lazy x -> (x,  TypeBind ty)::ctx ),
+      (b,Some ty),
+      ty)
+
+let add_bindtypes ctx rank bs = match bs with
   | [] -> assert false
-  | [b] -> let ty = fresm_mvar rank in add_type ctx b ty,[b],ty
+  | [b] -> let ctx',b,ty = add_bindtype ctx b in ctx,[b],ty
   | bs ->
-      let ctx,bs,ts = List.fold_left (
-        fun (ctx,bs,ty) b -> 
-      ) (ctx,[],[]) bs
+      let ctx',bs',ts = List.fold_left (
+        fun (ctx,bs,ts) b ->
+          let ctx',b',ty' = add_bindtype ctx b in ctx',b'::bs,ty'::ts
+      ) (ctx,[],[]) bs in
+        ctx',List.rev bs',TyCon(TyCTpl,List.rev ts)
 
 (** コンテクストを参照し，大域変数の定義を取得する
 
