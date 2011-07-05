@@ -1,6 +1,7 @@
 (** lambda評価器 *)
 open Absyn
 open Const
+open Type
 open Context
 open Prims
 
@@ -49,15 +50,22 @@ let rec eval_step ctx store tm =
       Prims.tm_error "*** no eval rule ***"
   | TmCon(CnSym d,vs) ->
       delta_reduc store d vs
-  | TmLet(b,topt,tm1,tm2) ->
-      TmApp(TmAbs(b,topt,tm2),tm1)
-  | TmApp(TmAbs((Eager _|Wild) as b,topt,tm1),tm2) ->
+  | TmLet(bs,tm1,tm2) ->
+      TmApp(TmAbs(bs,tm2),tm1)
+  | TmApp(TmAbs([(Eager _|Wild) as b,topt],tm1),tm2) ->
       if is_value tm2 then
         term_subst_top tm2 tm1
       else
-        TmApp(TmAbs(b,topt,tm1),eval_step ctx store tm2)
-  | TmApp(TmAbs(Lazy _,_,tm1),tm2) ->
+        TmApp(TmAbs([b,topt],tm1),eval_step ctx store tm2)
+  | TmApp(TmAbs([Lazy _,_],tm1),tm2) ->
       term_subst_top tm2 tm1
+  | TmApp(TmAbs(bs,tm2),TmTpl(tms)) ->
+      if List.length bs == List.length tms then
+        List.fold_left (fun tm tm' -> TmApp(tm,tm'))
+          (List.fold_right (fun b tm -> TmAbs([b],tm)) bs tm2)
+          tms
+      else
+        Prims.tm_error "*** tuple mismatch ***"
   | TmApp(TmCon(c,vs),tm1) when is_value tm1 ->
       if Const.arity c > List.length vs then
         TmCon(c,vs@[tm1])
@@ -172,18 +180,17 @@ let occur_check lrefs ty =
   in walk ty
 
 (** 型付けを行う *)
-let typeof ctx tm =
+let typeof ctxs tm =
   let lrefs = ref [] in
-  let rec walk ctx rank = function
+  let rec walk (tmctx,tyctx as ctx) rank = function
     | TmVar x as tm ->
-        instanciate rank tm (Context.get_typ ctx x)
+        instanciate rank tm (Context.get_typ tmctx x)
     | TmCon(c,vs) as tm ->
         tm,snd(instanciate rank tm (typ_of_const c vs))
-    | TmAbs(b,topt,tm) ->
-        let ty1 = fresh_mvar rank in
-        let ctx' = Context.add_type ctx b ty1 in
-        let tm,ty2 = walk ctx' rank tm in
-          TmAbs(b,Some ty1,tm),tarrow ty1 ty2
+    | TmAbs(bs,tm) ->
+        let tmctx',bs',ty1 = Context.add_types tmctx rank bs in
+        let tm',ty2 = walk (tmctx',tyctx) rank tm in
+          TmAbs(bs',tm'),tarrow ty1 ty2
     | TmApp(tm1,tm2) ->
         let ty = fresh_mvar rank in
         let tm1,ty1 = walk ctx rank tm1 in
@@ -191,7 +198,7 @@ let typeof ctx tm =
           unify lrefs ty1 (tarrow ty2 ty);
           occur_check lrefs ty1;
           TmApp(tm1,tm2),ty
-    | TmLet(b,topt,tm1,tm2) ->
+    | TmLet(bs,tm1,tm2) ->
         let tm1',ty1 = walk ctx (rank + 1) tm1 in
         let tm1',ty1 = if is_syntactic_value tm1 || is_lazy b then
           generalize (rank + 1) tm1' ty1
@@ -203,7 +210,7 @@ let typeof ctx tm =
           TmLet(b,Some ty1,tm1',tm2'),ty2
     | _ -> assert false
   in
-    walk ctx 0 tm
+    walk ctxs 0 tm
 
 let typing ctx tm =
   let tm',ty = typeof ctx tm in

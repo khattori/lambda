@@ -98,9 +98,16 @@ let rec fresh_name ctx x =
 let add_term ctx x tm ty o =
   (x,TermBind(tm,ty,o))::ctx
 
-let add_type ctx b ty = match b with
+let add_type ctx (b,topt) ty = match b with
   | Wild             -> ("_",TypeBind ty)::ctx
   | Eager x | Lazy x -> (x,  TypeBind ty)::ctx
+let add_types ctx rank bs = match bs with
+  | [] -> assert false
+  | [b] -> let ty = fresm_mvar rank in add_type ctx b ty,[b],ty
+  | bs ->
+      let ctx,bs,ts = List.fold_left (
+        fun (ctx,bs,ty) b -> 
+      ) (ctx,[],[]) bs
 
 (** コンテクストを参照し，大域変数の定義を取得する
 

@@ -6,6 +6,7 @@
 
 open Absyn
 open Const
+open Type
 
 let tm_unit  = TmCon(CnSym "unit",[])
 
