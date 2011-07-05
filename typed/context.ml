@@ -50,10 +50,18 @@ let rec name2index ctx x =
     | (y,_)::rest ->
         if y = x then 0 else 1 + (name2index rest x)
 
+(** コンテクストに名前を追加 **)
+let add_name ctx x =
+  (x,NameBind)::ctx
+
+let add_names ctx xs =
+  List.check_dup (fun s -> raise (Multiple_names s)) xs;
+  List.fold_left add_name ctx xs
+
 (** コンテクストに名前束縛を追加する *)
 let add_bind ctx b = match b with
-  | Wild             -> ("_",NameBind)::ctx
-  | Eager x | Lazy x -> (x,  NameBind)::ctx
+  | Wild             -> add_name ctx "_"
+  | Eager x | Lazy x -> add_name ctx x
 
 (** add_bindの複数バージョン．
     同じ名前を登録するとMultiple_names例外を投げる．
@@ -65,6 +73,7 @@ let add_binds ctx bs =
     List.check_dup (fun s -> raise (Multiple_names s)) xs;
     List.fold_left add_bind ctx bs
 
+
 (** 変数名をコンテクストに追加する．
 
     既に，同じ名前がコンテクストに登録されていた場合，名前の付け替えを
@@ -75,7 +84,7 @@ let rec fresh_name ctx x =
   then
     fresh_name ctx (x ^ "'")
   else
-    ((x,NameBind)::ctx), x
+    add_name ctx x, x
 
 (** コンテクストに大域変数の定義を追加する
 

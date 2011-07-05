@@ -70,39 +70,58 @@ type term =
   | TmAsc of term * typ
   | TmTbs of string * term
   | TmTpp of term * typ
-  | TmOvr of typ * over list
+  | TmOvr of typ * (typ option * term) list
 and case =
   | CsPat of const * term
   | CsDef of term
-and over = typ option * term
-
 (** 項を文字列に変換する *)
 let rec to_string ((tmctx,tyctx) as ctxs) = function
   | TmVar x ->
       sprintf "%s(%d)" (Context.index2name tmctx x) x
+  | TmMem m -> sprintf "<%d>" m
   | TmCon(cn,[]) -> const_to_string cn
   | TmCon(cn,vs) ->
       sprintf "(%s %s)"
         (const_to_string cn)
         (String.concat " " (List.map (to_string ctxs) vs))
-  | TmMem m -> sprintf "<%d>" m
-  | TmAbs(b,topt,tm) ->
-      let tmctx',s = to_string_bind tmctx b in
-        sprintf "(\\%s%s.%s)"
-          s (topt_to_string tyctx topt) (to_string (tmctx',tyctx) tm)
+  | TmAbs(bs,tm) ->
+      let tmctx',s = to_string_binds ctxs bs in
+        sprintf "(\\%s.%s)" s (to_string (tmctx',tyctx) tm)
   | TmApp(tm1,tm2) ->
       sprintf "(%s %s)" (to_string ctxs tm1) (to_string ctxs tm2)
-  | TmLet(b,topt,tm1,tm2) ->
-      let tmctx',s = to_string_bind tmctx b in
-        sprintf "(let %s%s = %s in %s)"
-          s (topt_to_string tyctx topt) (to_string ctxs tm1)
-          (to_string (tmctx',tyctx) tm2)
+  | TmLet(bs,tm1,tm2) ->
+      let tmctx',s = to_string_binds ctxs bs in
+        sprintf "(let %s = %s in %s)"
+          s (to_string ctxs tm1) (to_string (tmctx',tyctx) tm2)
+  | TmTpl tms ->
+        sprintf "(%s)" (String.concat ", " (List.map (to_string ctxs) tms))
+  | TmRcd rcd ->
+      sprintf "{ %s }"
+        (String.concat "; " (List.map (to_string_binding ctxs) rcd))
+  | TmSel(tm1,l) ->
+      sprintf "%s.%s" (to_string ctxs tm1) l
+  | TmCas(tm1,cs) ->
+      sprintf "(case %s of %s)"
+        (to_string ctxs tm1)
+        (String.concat " | " (List.map (to_string_case ctxs) cs))
+  | TmAsc(tm,ty) ->
+      sprintf "(%s:%s)" (to_string ctxs tm) (Type.to_string tyctx ty)
   | TmTbs(t,tm) ->
       let tyctx',s = Context.fresh_name tyctx t in
         sprintf "(\\<%s>.%s)" s (to_string (tmctx,tyctx') tm)
   | TmTpp(tm1,ty2) ->
       sprintf "(%s <%s>)" (to_string ctxs tm1) (Type.to_string tyctx ty2)
-
+  | TmOvr(ty,ovs) ->
+      sprintf "(over %s of %s)"
+        (Type.to_string tyctx ty)
+        (String.concat " | " (List.map (to_string_over ctxs) ovs))
+and to_string_binds (tmctx,tyctx) bs =
+  let foldf (tmctx,ss) (b,topt) =
+    let tmctx',s = to_string_bind tmctx b in
+      tmctx',sprintf "%s%s" s (topt_to_string tyctx topt)::ss
+  in
+  let tmctx',ss = List.fold_left foldf (tmctx,[]) bs in
+    tmctx',String.concat "," (List.rev ss)
 and to_string_bind ctx = function
   | Wild as b -> (Context.add_bind ctx b),"_"
   | Eager x   -> Context.fresh_name ctx x
@@ -110,6 +129,16 @@ and to_string_bind ctx = function
       let ctx',x' = Context.fresh_name ctx x
       in
         ctx',sprintf "\\%s" x'
+and to_string_binding ctxs (b,tm) = match b with
+  | Wild _  -> sprintf "_ = %s" (to_string ctxs tm)
+  | Eager x -> sprintf "%s = %s" x (to_string ctxs tm)
+  | Lazy  x -> sprintf "\\%s = %s" x (to_string ctxs tm)
+and to_string_case ctxs = function
+  | CsPat(c,tm) -> sprintf "%s -> %s" (const_to_string c) (to_string ctxs tm)
+  | CsDef tm    -> sprintf "... -> %s" (to_string ctxs tm)
+and to_string_over ((tmctx,tyctx) as ctxs) (topt,tm) =
+  sprintf "%s%s" (to_string ctxs tm) (topt_to_string tyctx topt)
+
 
 (* De Bruijin index *)
 (*
@@ -128,17 +157,36 @@ let typ_map onvar c ty =
 
 let term_map onvar ontyp c tm =
   let rec walk c tm = match tm with
-    | TmVar x               -> onvar c x
-    | TmMem _               -> tm
-    | TmCon(cn,vs)          -> TmCon(cn,List.map (walk c) vs)
-    | TmAbs(b,None,tm')     -> TmAbs(b,None,walk (c+1) tm')
-    | TmAbs(b,Some ty1,tm2) -> TmAbs(b,Some(ontyp c ty1),walk (c+1) tm2)
-    | TmApp(tm1,tm2)        -> TmApp(walk c tm1,walk c tm2)
-    | TmLet(b,None,tm1,tm2) -> TmLet(b,None,walk c tm1, walk (c+1) tm2)
-    | TmLet(b,Some ty,tm1,tm2) ->
-        TmLet(b,Some(ontyp c ty),walk c tm1, walk (c+1) tm2)
-    | TmTbs(t,tm')          -> TmTbs(t,walk (c+1) tm')
-    | TmTpp(tm1,ty2)        -> TmTpp(walk c tm1,ontyp c ty2)
+    | TmVar x           -> onvar c x
+    | TmMem _           -> tm
+    | TmCon(cn,vs)      -> TmCon(cn,List.map (walk c) vs)
+    | TmAbs(bs,tm')     -> TmAbs(bs_map c bs,walk (c + List.length bs) tm')
+    | TmApp(tm1,tm2)    -> TmApp(walk c tm1,walk c tm2)
+    | TmLet(bs,tm1,tm2) ->
+        TmLet(bs_map c bs,walk c tm1,walk (c + List.length bs) tm2)
+    | TmTpl(ts)         -> TmTpl(List.map (walk c) ts)
+    | TmRcd(bs)         -> TmRcd(List.map (fun (b,t) -> b,walk c t) bs)
+    | TmSel(tm,l)       -> TmSel(walk c tm,l)
+    | TmCas(tm,cs)      -> TmCas(walk c tm, cs_map c cs)
+    | TmAsc(tm,ty)      -> TmAsc(walk c tm,ontyp c ty)
+    | TmOvr(ty,os)      -> TmOvr(ontyp c ty,os_map c os)
+    | TmTbs(t,tm')      -> TmTbs(t,walk (c+1) tm')
+    | TmTpp(tm1,ty2)    -> TmTpp(walk c tm1,ontyp c ty2)
+  and bs_map c =
+    List.map
+      (fun (b,topt) -> match topt with
+         | None     -> b,None
+         | Some ty1 -> b,Some(ontyp c ty1))
+  and cs_map c =
+    List.map (function
+                | CsPat(con,t) -> CsPat(con,walk c t)
+                | CsDef t      -> CsDef(walk c t))
+  and os_map c =
+    List.map (
+      fun (topt,tm) ->
+        (match topt with None -> None | Some ty -> Some(ontyp c ty)),
+        walk c tm
+    )
   in
     walk c tm
 

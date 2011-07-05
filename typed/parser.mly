@@ -55,36 +55,44 @@ toplevel
 command
   : expression                    { fun ctx -> Eval($1 ctx)            }
   | DEF binder_list EQ expression { fun ctx -> Defn($2,$4 ctx)         }
-  | DATA IDENT ident_list EQ ctor_def_list { fun ctx ->
-                                               Data($2,List.rev $3,$5) }
+  | DATA IDENT ident_list EQ ctor_def_list
+      {
+        fun ctx ->
+          let xs = List.rev $3 in
+          let ctx' = Context.add_names ctx xs in
+          Data($2,$3,$5 ctx')
+      }
   | USE IDENT                     { fun ctx -> Use $2                  }
   | /* empty */                   { fun ctx -> Noop                    }
 ;
+
 ident_list
   : /* empty */      { []     }
   | ident_list IDENT { $2::$1 }
 ;
 ctor_def_list
-  : ctor_def                    { [$1]   }
-  | ctor_def_list VBAR ctor_def { $3::$1 }
+  : ctor_def                    { fun ctx -> [$1 ctx]   }
+  | ctor_def_list VBAR ctor_def { fun ctx -> $3 ctx::$1 ctx}
 ;
 ctor_def
-  : IDENT type_expression_list { $1,List.rev $2 }
+  : IDENT type_expression_list { fun ctx -> $1,List.rev($2 ctx) }
 ;
 type_expression_list
-  : /* empty */                          { []     }
-  | type_expression_list type_expression { $2::$1 }
+  : /* empty */                                 { []     }
+  | type_expression_list atomic_type_expression { $2::$1 }
 ;
 type_expression
   : atomic_type_expression { $1 }
-  | type_expression RARROW atomic_type_expression
-  | TCONST type_expression_list { fun ctx -> TyCon($1,$2 ctx) }
+  | atomic_type_expression RARROW type_expression
+      { fun ctx -> TyCon(TyCArr,[$1 ctx;$3 ct]) }
+  | TCONST type_expression_list
+      { fun ctx -> TyCon($1,List.rev($2 ctx)) }
 ;
 
 atomic_type_expression
-  : IDENT { fun ctx ->
-  | LBREAN type_expression RPAREN { $2 }
-
+  : IDENT { fun ctx -> TyVar(Context.name2index $1) }
+  | LPAREN type_expression RPAREN { $2 }
+;
 
 binder_list
   : binder_comma_list {
@@ -144,10 +152,11 @@ apply_expression
 ;
 
 atomic_expression
-  : IDENT                       { fun ctx -> TmVar(Context.name2index ctx s) }
+  : IDENT                       { fun ctx -> TmVar(Context.name2index ctx $1) }
   | CONST                       { fun ctx -> TmCon($1,[]) }
   | LPAREN expression RPAREN    { $2 }
   | LBRACE record RBRACE        { fun ctx -> TmRcd(check_record($2 ctx)) }
+  | LBRACE list RBRACE          { fun ctx -> $2 ctx }
   | LBRACE RBRACE               { fun ctx -> Prims.nil }
   | LPAREN RPAREN               { fun ctx -> Prims.tm_unit }
 ;
