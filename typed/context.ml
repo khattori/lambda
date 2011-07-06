@@ -97,25 +97,13 @@ let rec fresh_name ctx x =
 let add_term ctx x tm ty o =
   (x,TermBind(tm,ty,o))::ctx
 
-let add_bindtype ctx (b,topt) =
-  let ty = match topt with
-    | None -> fresh_mvar rank
-    | Some ty -> ty
-  in ((match b with
-         | Wild             -> ("_",TypeBind ty)::ctx
-         | Eager x | Lazy x -> (x,  TypeBind ty)::ctx ),
-      (b,Some ty),
-      ty)
+let add_typebind ctx b ty =
+  match b with
+    | Wild             -> ("_",TypeBind ty)::ctx
+    | Eager x | Lazy x -> (x,  TypeBind ty)::ctx
 
-let add_bindtypes ctx rank bs = match bs with
-  | [] -> assert false
-  | [b] -> let ctx',b,ty = add_bindtype ctx b in ctx,[b],ty
-  | bs ->
-      let ctx',bs',ts = List.fold_left (
-        fun (ctx,bs,ts) b ->
-          let ctx',b',ty' = add_bindtype ctx b in ctx',b'::bs,ty'::ts
-      ) (ctx,[],[]) bs in
-        ctx',List.rev bs',TyCon(TyCTpl,List.rev ts)
+let add_typebinds ctx bs ts =
+  List.fold_left2 add_typebind ctx bs ts
 
 (** コンテクストを参照し，大域変数の定義を取得する
 

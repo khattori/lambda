@@ -8,7 +8,7 @@ type t =
   | Eval of term
   | Use  of string
   | Noop
-and ctor = string * typ list
+and ctor = string * Type.typ list
 
 (* バッチモード設定 *)
 let batch_mode_ref = ref false  (* -b *)
@@ -16,35 +16,44 @@ let batch_mode_ref = ref false  (* -b *)
 let print_result ctx v ty =
   if not !batch_mode_ref then
     Printf.printf "===> %s: %s\n"
-      (to_string (ctx,ctx) v) (typ_to_string ctx ty)
+      (to_string (ctx,ctx) v) (Type.to_string ctx ty)
 
 let print_bind ctx b tm ty =
   if not !batch_mode_ref then
     Printf.printf "%s = %s: %s\n"
-      (binder_to_string b) (to_string (ctx,ctx) tm) (typ_to_string ctx ty)
-
+      (binder_to_string b) (to_string (ctx,ctx) tm) (Type.to_string ctx ty)
 
 (** 大域変数を定義する *)
-let def_bind store ctx b tm = match b with
-  | Wild ->
-      let tm',ty = Core.typing ctx tm in
-      let v = Core.eval ctx store tm' in
-        print_bind ctx b v ty;
-        ctx
-  | Eager x ->
-      let tm',ty = Core.typing ctx tm in
-      let v = Core.eval ctx store tm' in
-        print_bind ctx b v ty;
-        Context.add_term ctx x v ty 1
-  | Lazy x ->
-      let tm',ty = Core.typing ctx tm in
-        print_bind ctx b tm' ty;
-        Context.add_term ctx x tm' ty 1
+let def_binds store ctx bs tm =
+  let rec iter bts tms o ctx' = match bts,tms with
+    | [],[] -> ctx'
+    | (Wild as b,Some ty)::bs',tm::tms' ->
+        let v = Core.eval ctx store tm in
+          print_bind ctx b v ty;
+          iter bs' tms' o ctx'
+    | ((Eager x) as b,Some ty)::bs',tm::tms' ->
+        let v = Core.eval ctx store tm in
+          print_bind ctx b v ty;
+          iter bs' tms' (o + 1) (Context.add_term ctx' x v ty o)
+    | ((Lazy x) as b,Some ty)::bs',tm::tms' ->
+        print_bind ctx b tm ty;
+        iter bs' tms' (o + 1) (Context.add_term ctx' x tm ty o)
+    | _ -> assert false
+  in
+    match bs with
+      | [b] ->
+          let tm',ty = Core.typing ctx tm b in
+            iter [bt] [tm'] 1 ctx
+      | bs ->
+          let tm',bts = Core.typings ctx tm bts in
+            match Core.eval_tuple ctx store tm' with
+              | TmTpl tms -> iter bts tms 1 ctx
+              | _ -> assert false
 
 (* ロード関数のテーブル定義 *)
 type loader_t = {
-  mutable load_module : string -> (term, typ) Context.t;
-  mutable use_module  : string -> (term, typ) Context.t;
+  mutable load_module : string -> (term, Type.typ) Context.t;
+  mutable use_module  : string -> (term, Type.typ) Context.t;
 }
 let dummy_loader f = assert false
 
@@ -74,12 +83,13 @@ let (
 let exec store ctx cmd =
   match cmd with
     | Eval tm ->
-        let tm',ty = Core.typing ctx tm in
+        let tm',(_,Some ty) = Core.typing ctx tm Wild in
         let v = Core.eval ctx store tm' in
           print_result ctx tm' ty;
           print_result ctx v ty;
           ctx
-    | Defn(b,tm) ->
-        def_bind store ctx b tm
-    | Use(name,ctx') -> Context.join ctx' ctx
+    | Defn(bs,tm) ->
+        def_binds store ctx bs tm
+    | Data _ -> ctx
+    | Use name -> ctx
     | Noop -> ctx

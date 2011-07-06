@@ -1,4 +1,5 @@
 (** lambda評価器 *)
+open ListAux
 open Absyn
 open Const
 open Type
@@ -7,6 +8,7 @@ open Prims
 
 exception Unify_fail of link ref list
 exception Occur_check of link ref list
+exception Not_tuple of link ref list
 
 (*
  * delta_reduc: δ簡約
@@ -85,6 +87,19 @@ let rec eval_step ctx store tm =
       TmTpp(eval_step ctx store tm1,ty2)
   | _ -> Prims.tm_error "*** no eval rule ***"
 
+let eval_tuple ctx store tm =
+  let rec iter tm =
+(*    Printf.printf "---> %s\n" (Absyn.to_string ctx tm); *)
+    match tm with
+      | TmTpl _ -> tm
+      | tm ->
+          if is_value tm then
+            tm
+          else
+            iter (eval_step ctx store tm)
+  in
+    iter tm
+
 (** 項が値になるまで評価を行う *)
 let eval ctx store tm =
   let rec iter tm =
@@ -96,32 +111,40 @@ let eval ctx store tm =
   in
     iter tm
 
-let typ_of_const c vs =
-  match c with
-    | CnInt _ -> tint
-    | CnRea _ -> treal
-    | CnStr _ -> tstring
-    | CnSym s -> Prims.get_const_type s
-
-let generalize rank tm ty =
-  let id_ref = ref 0 in
-  let ts_ref = ref [] in
-  let rec walk = function
-    | TyMva({contents=NoLink(r,_)} as link) when r >= rank ->
-        let id = !id_ref in
-        let ty = TyVar id in
-          ts_ref := Printf.sprintf "t%d" id::!ts_ref;
-          link := link_to ty r;
-          incr id_ref;
-          ty
-    | TyMva{contents=LinkTo{typ=ty}} -> walk ty
-    | TyCon(tc,tys) -> TyCon(tc,List.map walk tys)
-    | ty -> ty
+let generalize rank tm b ty =
+  let generalize_ rank tm ty =
+    let id_ref = ref 0 in
+    let ts_ref = ref [] in
+    let rec walk = function
+      | TyMva({contents=NoLink(r,_)} as link) when r >= rank ->
+          let id = !id_ref in
+          let ty = TyVar id in
+            ts_ref := Printf.sprintf "t%d" id::!ts_ref;
+            link := link_to ty r;
+            incr id_ref;
+            ty
+      | TyMva{contents=LinkTo{typ=ty}} -> walk ty
+      | TyCon(tc,tys) -> TyCon(tc,List.map walk tys)
+      | ty -> ty
+    in
+    let ty' = walk ty in (
+        List.fold_right (fun t tm -> TmTbs(t,tm)) !ts_ref tm,
+        List.fold_right (fun t ty -> TyAll(t,ty)) !ts_ref ty'
+      )
   in
-  let ty' = walk ty in (
-      List.fold_right (fun t tm -> TmTbs(t,tm)) !ts_ref tm,
-      List.fold_right (fun t ty -> TyAll(t,ty)) !ts_ref ty'
-    )
+    if is_lazy b || is_syntactic_value tm then
+      generalize_ rank tm ty
+    else
+      tm,ty
+
+let generalizes rank tm bs ts =
+  match tm with
+    | TmTpl(tms) ->
+        let tms',ts =
+          List.split(List.map2 (fun tm b -> generalize rank tm b) tms bs)
+        in
+          TmTpl(tms'),ts
+    | _ -> tm,ts
 
 let instanciate rank tm ty =
   let tm_ref = ref tm in
@@ -180,46 +203,74 @@ let occur_check lrefs ty =
   in walk ty
 
 (** 型付けを行う *)
-let typeof ctxs tm =
-  let lrefs = ref [] in
-  let rec walk (tmctx,tyctx as ctx) rank = function
+let typeof lrefs tmctx tm =
+  let typeof_const c vs =
+    match c with
+      | CnInt _ -> tint
+      | CnRea _ -> treal
+      | CnStr _ -> tstring
+      | CnSym s -> Prims.get_const_type s
+  in
+  let rec walk (tmctx,tyctx as ctxs) rank = function
     | TmVar x as tm ->
         instanciate rank tm (Context.get_typ tmctx x)
+    | TmMem _ -> assert false (* プログラムテキスト中には出現しない *)
     | TmCon(c,vs) as tm ->
-        tm,snd(instanciate rank tm (typ_of_const c vs))
+        tm,snd(instanciate rank tm (typeof_const c vs))
     | TmAbs(bs,tm) ->
-        let tmctx',bs',ty1 = Context.add_bindtypes tmctx rank bs in
+        let bs,_ = List.split bs in
+        let ts = map (fun _ -> fresh_mvar rank) bs in
+        let bts = List.map2 (fun b t -> (b,Some t)) bs ts in
+        let tmctx' = Context.add_typebinds tmctx bs ts in
         let tm',ty2 = walk (tmctx',tyctx) rank tm in
-          TmAbs(bs',tm'),tarrow ty1 ty2
+        let ty1 =
+          match ts with
+            | []   -> assert false (* 空の束縛は無い *)
+            | [ty] -> ty           (* 単一束縛の場合はその型を返す *)
+            | ts   -> TyCon(TyCTpl,ts)
+        in
+          TmAbs(bts,tm'),tarrow ty1 ty2
     | TmApp(tm1,tm2) ->
         let ty = fresh_mvar rank in
-        let tm1,ty1 = walk ctx rank tm1 in
-        let tm2,ty2 = walk ctx rank tm2 in
+        let tm1,ty1 = walk ctxs rank tm1 in
+        let tm2,ty2 = walk ctxs rank tm2 in
           unify lrefs ty1 (tarrow ty2 ty);
           occur_check lrefs ty1;
           TmApp(tm1,tm2),ty
-(*
-let x,y,z = (\[T].\x:T.x,\[T].\x:T.x,\[T].\x:T.x)
-let x = \[T1].\[T2].\[T3].(\x:T1.x,\x:T2.x,\x:T3.x)
-fst (x [T1] [T2] [T3])
-*)
-
+    | TmLet([b,_],tm1,tm2) ->
+        let tm1',ty1 = walk ctxs (rank + 1) tm1 in
+        let tm1',ty1' = generalize (rank + 1) tm1' b ty1 in
+        let tmctx' = Context.add_typebind tmctx b ty1' in
+        let tm2',ty2 = walk (tmctx',tyctx) rank tm2 in
+          TmLet([b,Some ty1'],tm1',tm2'),ty2
     | TmLet(bs,tm1,tm2) ->
-        let tm1',ty1 = walk ctx (rank + 1) tm1 in
-        let tm1',ty1 = if is_syntactic_value tm1 || is_lazy b then
-          generalize (rank + 1) tm1' ty1
-        else
-          tm1',ty1
+        let bs,_ = List.split bs in
+        let tm1',ty1 = walk ctxs (rank + 1) tm1 in
+        let ts =
+          match ty1 with
+            | TyCon(TyCTpl,ts) -> ts
+            | _ -> raise (Not_tuple !lrefs)
         in
-        let tmctx',bs'',_ = Context.add_bindtypes tmctx rank bs' in
-        let tm2',ty2 = walk ctx' rank tm2 in
-          TmLet(bs'',tm1',tm2'),ty2
+        let tm1',ts' = generalizes (rank + 1) tm1' bs ts in
+        let bts = List.map2 (fun b t -> (b,Some t)) bs ts' in
+        let tmctx' = Context.add_typebinds tmctx bs ts' in
+        let tm2',ty2 = walk (tmctx',tyctx) rank tm2 in
+          TmLet(bts,tm1',tm2'),ty2
     | _ -> assert false
   in
-    walk ctxs 0 tm
+    walk (tmctx,Context.empty) 0 tm
 
-let typing ctx tm =
-  let tm',ty = typeof ctx tm in
-    if is_syntactic_value tm then generalize 0 tm' ty else tm',ty
+let typing ctx tm b =
+  let lrefs = ref [] in
+  let tm',ty = typeof lrefs ctx tm in
+    generalize 0 tm' b ty
 
-
+let typings ctx tm bs =
+  let lrefs = ref [] in
+  let tm',ty = typeof lrefs ctx tm in
+  let ts =
+    match ty with
+      | TyCon(TyCTpl,ts) -> ts
+      | _ -> raise (Not_tuple !lrefs)
+  in
+    generalizes 0 tm' bs ts
