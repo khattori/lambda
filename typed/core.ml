@@ -141,7 +141,7 @@ let generalizes rank tm bs ts =
   match tm with
     | TmTpl(tms) ->
         let tms',ts =
-          List.split(List.map2 (fun tm b -> generalize rank tm b) tms bs)
+          List.split(List.map3 (generalize rank) tms bs ts)
         in
           TmTpl(tms'),ts
     | _ -> tm,ts
@@ -219,7 +219,7 @@ let typeof lrefs tmctx tm =
         tm,snd(instanciate rank tm (typeof_const c vs))
     | TmAbs(bs,tm) ->
         let bs,_ = List.split bs in
-        let ts = map (fun _ -> fresh_mvar rank) bs in
+        let ts = List.map (fun _ -> fresh_mvar rank) bs in
         let bts = List.map2 (fun b t -> (b,Some t)) bs ts in
         let tmctx' = Context.add_typebinds tmctx bs ts in
         let tm',ty2 = walk (tmctx',tyctx) rank tm in

@@ -145,7 +145,8 @@ let get_dtor_fun d =
 (* 定数シンボルテーブルに登録 *)
 let _ =
   List.iter (fun (s,(arity,_))   -> Const.add_ctor s arity) _ctor_table;
-  List.iter (fun (s,(arity,_,_)) -> Const.add_dtor s arity) _dtor_table
+  List.iter (fun (s,(arity,_,_)) -> Const.add_dtor s arity) _dtor_table;
+  List.iter (fun (s,arity)       -> Type.add_tycon s arity) _ttor_table
 
 let typ_table =
   List.map (fun (s,(_,t)) -> s,t) _ctor_table

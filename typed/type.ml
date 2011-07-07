@@ -78,3 +78,12 @@ let rec to_string ctx = function
 let topt_to_string ctx = function
   | None -> ""
   | Some ty -> sprintf ":%s" (to_string ctx ty)
+
+
+let ( (add_tycon: string -> int -> unit),
+      (is_tycon : string -> bool) )
+    =
+  let tycon_table_ref_ = ref [] in
+    ( (fun s arity -> tycon_table_ref_ := (s,arity)::!tycon_table_ref_),
+      (fun s -> List.mem_assoc s !tycon_table_ref_) )
+

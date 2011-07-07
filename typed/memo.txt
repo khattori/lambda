@@ -1,0 +1,397 @@
+☆方法
+
+型レベル評価によるML型推論の拡張
+(Extending ML Type Inference with Type Level Evaluation)
+
+[DM型推論の拡張の方向性]
+- 制約を使う方法
+- 型変数の種類を増やす
+  Remyの列変数によるレコード多相
+- カインドを導入する
+  Ohoriの多相レコード
+- 型適用時にチェックする
+
+<c>=><b>=><a>::{{b->c}}=>a->c
+
+レコード型の場合
+\x.x.l : <b>=><a::{l:b}>=>a->b
+
+[[\x.x.l]] ==> \<t>.\x:t.x.l
+               ^^^^^^^^^^^^^
+               型適用時に決定する
+
+T ::= t | k T ... T
+S ::= <t> => S | T
+
+E ::= x | c
+    | \x.E
+    | \\x.E
+    | fix E
+    | let x = E in E
+    | E E
+    | case E of
+        c1 -> E
+      | c2 -> E | ...
+    | \<t>.E
+    | tcase T of
+        k1 => E
+      | k2 => E | ...
+   
+\<t>.tcase t -> unit of
+        Int -> unit  => print_int
+      | Real -> unit => print_real
+      | a => else
+<t> => 0 : <t> => int
+
+let f = \x.x in
+   f f 3
+
+let f = <t>=>\x:t.x in
+   f <int->int> f <int> 3
+
+
+☆ polymorphic recursionの例
+
+(1) Double
+let rec double f y = f (f y)
+    and foo v = double (fun x -> x + 1) v
+    and bar v = double (fun x -> x +. 1.0) v;;
+
+この場合，uncoupleすれば解決
+let double f y = f (f y);
+let foo v = double (fun x -> x + 1) v
+and bar v = double (fun x -> x +. 1.0) v;;
+
+(2) Mycroftの例
+let rec map f = function [] -> [] | x::xs -> f x::map f xs
+and sqList l = map (fun x -> x * x) l
+and compList l = map not l;;
+
+これもuncoupleで解決
+let rec map f = function [] -> [] | x::xs -> f x::map f xs;;
+let sqList l = map (fun x -> x * x) l
+and compList l = map not l;;
+
+(3) sum list
+let rec id x = x
+and sumList = function [] -> 0 | x::xs -> id x + sumList (id xs);;
+
+let print = fix (\\print.\<'a>.
+  tcase 'a -> unit of
+    | Int     -> unit : print_int
+    | Float   -> unit : print_float
+    | String  -> unit : print_string
+    | List 'b -> unit : let rec print_list' ls =
+                            case ls of
+                              | [] -> ()
+                              | x::xs -> print x; print_list' xs
+                            in print_list')
+
+
+(\ls.case ls of
+          | [] -> ()
+          | x::xs -> print_int x; print <List Int> xs) [1;2;3;4]
+
+# print : 'a -> unit
+let rec print = 
+    tcase 'a -> unit of
+      | Int -> unit    => print_int
+      | Float -> unit  => print_float
+      | String -> unit => print_string
+      | Pair ('a,'a) -> unit => \pair . -> print <a>; print <b>
+      | List 'b -> unit =>
+         \ls.case ls of           :: List 'b -> unit
+              | [] -> ()
+              | x::xs -> print <'b> x; print <'b> xs)
+
+print <List Int> [1;2;3;4]
+
+\ls.case ls of
+
+
+--->
+(\ls.case ls of
+   | [] -> ()
+   | x::xs -> print <Int> x; print <List Int> xs)
+--->
+(\ls.case ls of
+   | [] -> ()
+   | x::xs -> print_int x; print <List Int> xs)
+
+
+print_list = \ls.case ls of
+       [] -> ()
+  | x::xs -> print x; print_list xs
+
+
+SystemFの構文
+
+<typist>
+
+T ::= t          型変数
+    | K T ...    型コンストラクタ
+    | T -> T
+    | t => T
+
+E ::= c | x
+    | E E               // λ適用
+    | \x.E              // λ抽象
+    | let x = E in E
+
+E ::= c | x
+    | E E               // λ適用
+    | E<T>              // 型適用
+    | \x:T.E            // λ抽象
+    | \<t>.E            // 型抽象
+
+
+[型変換規則]   Γ |- E : T |> E'
+
+        x:t=>T ∈ Γ 
+------------------------------- t' is fresh type variable 
+ Γ |- x : T[t:=t'] |> x <t'>
+
+
+   Γ{x:T1} |- E : T2 |> E'
+-----------------------------------
+ Γ |- \x.E : T1 -> T2 |> \x:T1.E'
+
+
+ Γ |- E1 : T1 -> T2 |> E1'   Γ |- E2 : T1 |> E1'
+---------------------------------------------------
+          Γ |- E1 E2 : T2 |> E1' E2'
+
+
+ Γ |- E1 : T1 |> E1'   Γ{x:t=>T1} |- E2 : T2 |> E2'     
+-------------------------------------------------------- t=FTV(T1)\FTV(Γ)
+ Γ |- let x = E1 in E2 : T2 |> (\x:t=>T1.E2') \<t>.E1'
+
+
+let id = \x.x in id id 0
+
+(\id:t=>t->t.((id<int->int>) (id<int>)) 0) (\<t>.\x:t.x)
+
+
+
+
+let id = \<t>\x:t.x in id <t'>
+もし，id : t => Tなら fresh t'を生成し，
+id<t'> : id <T> ...
+
+
+    | typecase t => T of
+        | K1 => E1
+        | K2 => E2
+        ...
+
+
+
+
+    t => t -> t
+add = typecase t => t -> t -> t of Int -> iadd | Float -> fadd
+double = \<t>.\x.add<t> x x
+
+[[double 3]]   => double<Int> 3
+
+double: t => t -> T
+            ^^^
+            Int
+
+
+let多相による型推論にともない，SystemF?への変換を行う．
+
+
+
+
+例：
+\<t>.\x.(x:t) : t => t -> t
+\x.x          : a -> a
+
+[型規則]
+   x:T ∈ Γ
+--------------
+ Γ |- x : T
+
+
+  Γ{x:T1} |- E : T2               Γ |- E1 : T1 -> T2   Γ |- E2 : T1
+-----------------------           -------------------------------------
+ Γ |- \x.E : T1 -> T2                       Γ |- E1 E2 : T2
+
+
+
+  Γ{t::Type} |- E : T                     Γ|- E : t => T'    Γ||- T 
+-----------------------               ---------------------------------
+ Γ |- \<t>.E : t => T                        Γ |- E <T>: [T\t]T'
+
+   Γ |- E : T    Γ ||- T
+-------------------------------
+       Γ |- E:T : T
+
+                Γ |- Ei : t1 => ... => T[Ki t1...\t]
+-------------------------------------------------------------
+ Γ |- typecase t => T of K1 -> E1 | K2 -> E2 | ... : t => T
+
+
+(->) -> \<t1>.\<t2>.\x.\y.y    : t1 => t2 => int -> (a -> a)
+
+let x = (\x.x) in
+
+typeof (\x.x) ===> ->(X, X) ... 型変数 X
+
+def add = \\T.
+  typecase T of
+    | Int   -> iadd
+    | Float -> fadd
+    | _     -> type error
+
+add : Type(T) -> T -> T -> T
+add Int   : Int -> Int -> Int
+add Float : Float -> Float -> Float
+
+
+(add Int) : Int -> Int -> Int
+
+def zero = \T.case T of
+              | Int -> 0
+              | Unit -> unit
+              | Pair -> \T1.\T2.:: (zero T1) (zero T2)
+
+Γ |- t_int  : T[t/Int] 
+Γ |- t_unit : T[t/Unit]
+...|- t_pair : Type(t1) -> Type(t2) -> T[t/Pair t1 t2]
+--------------------------------------------------
+Γ |- typecase t : T of Int -> t_int | Unit -> t_unit | ...  : Type(t) -> T
+
+def add = typecase X : X -> X -> X of
+  | Int => iadd
+  | Float => fadd
+  | Unit => (\x.\y.unit)
+  | ...
+
+add : <T> => T -> T -> T
+
+double = \\T.\x.add<T> x x
+
+double : Type(T) -> T -> T
+
+Type(T) -> T -> T   型変数Tを引数に取り，T -> Tを返す
+
+add : (Πt:Type.Add t)
+
+∀T.T->T
+if T ==
+
+
+
+(式)
+E ::= x
+    | c
+    | E E
+    | \x.E
+    | let x = E in E
+    | E :> E           // キャスト
+    | typeof E
+    | E : T            // 型注釈
+     (T -> T) : X
+
+   --- 以下は，変換後
+    | \\X.E
+    | case X with T => E | ...
+    | E T
+
+(型式)
+T ::= X
+    | C T...
+    | T -> T
+
+(多重型)
+S ::= T
+    | X=>S
+
+over add <'a> : 'a -> 'a -> 'a
+odef add = iadd : int -> int -> int
+odef add = fadd : float -> float -> float
+
+let double = \x.add x x
+
+<'a>=>'a->'a
+
+double 3
+
+
+[型付け規則]
+     x:∀X.X => T
+------------------------  Y is fresh type var
+ Γ |- x : Y => T[Y\X]
+
+      Γ;x:X=>T |- t : S
+-----------------------------
+ Γ |- over o<X>::T in t : S
+
+ Γ |- t1 : T   Γ;o<T'>:T |- t2 : S
+--------------------------------------
+  Γ |- olet o = t1 in t2 : S
+
+
+ Γ |- t1 : X => S -> T   Γ |- t2 : S
+---------------------------------------
+        Γ |- t1 t2 : X => T
+
+   Γ;x:S |- t : X => T
+--------------------------
+ Γ |- \x.t : X => S -> T
+    
+
+over add <'a> : 'a -> 'a -> 'a in
+olet add = iadd in 
+olet add = fadd in
+let double = \x.add x x in
+    double 3
+
+
+over add : 'a => 'a -> 'a -> 'a
+   = E1
+ and E2
+ and ...
+;
+
+は，以下のように変換される．
+
+def f X = typecase X of
+              T1 => E1                [X/T1]T = T1'
+            | T2 => E2
+              ...
+
+add: 'a => 'a -> 'a -> 'a
+     where { a : Int; Float }
+
+double : 'a => 'a -> 'a
+
+neg : 'a => 'a -> 'a
+double : 'b => 'b -> 'b
+
+let double T x =
+   let add = add T in add x
+
+foo: 'a => 'b => 'a -> 'b -> 'a * 'b
+foo = \\T1.\\T2.\x.\y.(double T1 x, neg T2 y)
+
+bar T x = (double T x, ineg y)
+'b_ => 'b_ -> 'b_
+
+ Γ |- t1 : X => S -> T   Γ |- t2 : S
+---------------------------------------
+        Γ |- t1 t2 : X => T
+
+ X => T    
+--------
+ [K\X]T
+
+tuple分解をやめてみる
+let foo = (1,2) in
+let _ = def x is fst foo in
+let _ = def y is snd foo;
+
+def 式
+
+Γ |- def x = E :

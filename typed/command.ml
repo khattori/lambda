@@ -27,15 +27,15 @@ let print_bind ctx b tm ty =
 let def_binds store ctx bs tm =
   let rec iter bts tms o ctx' = match bts,tms with
     | [],[] -> ctx'
-    | (Wild as b,Some ty)::bs',tm::tms' ->
+    | (Wild as b,ty)::bs',tm::tms' ->
         let v = Core.eval ctx store tm in
           print_bind ctx b v ty;
           iter bs' tms' o ctx'
-    | ((Eager x) as b,Some ty)::bs',tm::tms' ->
+    | ((Eager x) as b,ty)::bs',tm::tms' ->
         let v = Core.eval ctx store tm in
           print_bind ctx b v ty;
           iter bs' tms' (o + 1) (Context.add_term ctx' x v ty o)
-    | ((Lazy x) as b,Some ty)::bs',tm::tms' ->
+    | ((Lazy x) as b,ty)::bs',tm::tms' ->
         print_bind ctx b tm ty;
         iter bs' tms' (o + 1) (Context.add_term ctx' x tm ty o)
     | _ -> assert false
@@ -43,9 +43,10 @@ let def_binds store ctx bs tm =
     match bs with
       | [b] ->
           let tm',ty = Core.typing ctx tm b in
-            iter [bt] [tm'] 1 ctx
+            iter [b,ty] [tm'] 1 ctx
       | bs ->
-          let tm',bts = Core.typings ctx tm bts in
+          let tm',tys = Core.typings ctx tm bs in
+          let bts = List.combine bs tys in
             match Core.eval_tuple ctx store tm' with
               | TmTpl tms -> iter bts tms 1 ctx
               | _ -> assert false
@@ -83,7 +84,7 @@ let (
 let exec store ctx cmd =
   match cmd with
     | Eval tm ->
-        let tm',(_,Some ty) = Core.typing ctx tm Wild in
+        let tm',ty = Core.typing ctx tm Wild in
         let v = Core.eval ctx store tm' in
           print_result ctx tm' ty;
           print_result ctx v ty;

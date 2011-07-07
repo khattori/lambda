@@ -32,8 +32,8 @@
   let ident_token s =
     if Const.is_symbol s then
       CONST(CnSym s)
-    else if Type.is_const s then
-      TCONST(TyCSym s)
+    else if Type.is_tycon s then
+      TCONST(Type.TyCSym s)
     else
       IDENT s
 

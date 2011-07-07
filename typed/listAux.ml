@@ -31,4 +31,13 @@ let check_dup f xs =
   in
     iter xs
 
+(** 3つのリストを1つのリストに写像する *)
+(* map3: ('a -> 'b -> 'c -> 'd) -> 'a list -> 'b list -> 'c list -> 'd list *)
+let rec map3 f xs ys zs =
+  match (xs,ys,zs) with
+    | [],[],[] -> []
+    | (x::xs,y::ys,z::zs) -> let r = f x y z in r::map3 f xs ys zs
+    | _ -> invalid_arg "ListAux.map3"
+
 end
+

@@ -78,7 +78,7 @@ let load_file store fname =
       try
         add_loading mname;
         Lexer.init lexbuf fname;
-        let result = Parser.main Lexer.token lexbuf in
+        let result = Parser.toplevel Lexer.token lexbuf in
         let cmds = result init_ctx in
         let ctx = List.fold_left (Command.exec store) init_ctx cmds in
           Printf.printf "file '%s' loaded.\n" fname;

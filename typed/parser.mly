@@ -15,6 +15,7 @@
 %token OF
 %token OVER
 %token DOT
+%token RARROW
 %token DDDOT
 %token COMMA
 %token VBAR
