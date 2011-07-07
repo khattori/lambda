@@ -46,8 +46,7 @@ let delta_reduc store d vs =
  * (\\x.t) t' → t[x:=t']
  * 
  *)
-let rec eval_step ctx store tm =
-  match tm with
+let rec eval_step ctx store = function
   | tm when is_value tm ->
       Prims.tm_error "*** no eval rule ***"
   | TmCon(CnSym d,vs) ->
@@ -81,6 +80,10 @@ let rec eval_step ctx store tm =
   | TmVar x ->
       let tm',o = Context.get_term ctx x in
         term_shift (x + o) tm'
+  | TmTpl tms ->
+      TmTpl(
+        List.map
+          (fun tm -> if is_value tm then tm else eval_step ctx store tm) tms)
   | TmTpp(TmTbs(x,tm1),ty2) ->
       tytm_subst_top ty2 tm1
   | TmTpp(tm1,ty2) ->
@@ -103,7 +106,7 @@ let eval_tuple ctx store tm =
 (** 項が値になるまで評価を行う *)
 let eval ctx store tm =
   let rec iter tm =
-(*    Printf.printf "---> %s\n" (Absyn.to_string ctx tm); *)
+    Printf.printf "---> %s\n" (Absyn.to_string ctx tm);
     if is_value tm then
       tm
     else
@@ -111,25 +114,27 @@ let eval ctx store tm =
   in
     iter tm
 
-let generalize rank tm b ty =
+let generalize ctx rank tm b ty =
   let generalize_ rank tm ty =
     let id_ref = ref 0 in
     let ts_ref = ref [] in
     let rec walk = function
-      | TyMva({contents=NoLink(r,_)} as link) when r >= rank ->
+      | TyMva{contents=NoLink(mvid,r)} when r >= rank ->
           let id = !id_ref in
-          let ty = TyVar id in
-            ts_ref := Printf.sprintf "t%d" id::!ts_ref;
-            link := link_to ty r;
-            incr id_ref;
-            ty
+            ts_ref := (Printf.sprintf "t%d" id,mvid)::!ts_ref;
+            incr id_ref
       | TyMva{contents=LinkTo{typ=ty}} -> walk ty
-      | TyCon(tc,tys) -> TyCon(tc,List.map walk tys)
-      | ty -> ty
+      | TyCon(tc,tys) -> List.iter walk tys
+      | ty -> ()
     in
-    let ty' = walk ty in (
-        List.fold_right (fun t tm -> TmTbs(t,tm)) !ts_ref tm,
-        List.fold_right (fun t ty -> TyAll(t,ty)) !ts_ref ty'
+      walk ty;
+      (
+        List.fold_right (
+          fun (t,mvid) tm -> Absyn.term_gen t mvid tm
+        ) !ts_ref tm,
+        List.fold_right (
+          fun (t,mvid) ty -> Absyn.typ_gen t mvid ty
+        ) !ts_ref ty
       )
   in
     if is_lazy b || is_syntactic_value tm then
@@ -137,11 +142,11 @@ let generalize rank tm b ty =
     else
       tm,ty
 
-let generalizes rank tm bs ts =
+let generalizes ctx rank tm bs ts =
   match tm with
     | TmTpl(tms) ->
         let tms',ts =
-          List.split(List.map3 (generalize rank) tms bs ts)
+          List.split(List.map3 (generalize ctx rank) tms bs ts)
         in
           TmTpl(tms'),ts
     | _ -> tm,ts
@@ -165,8 +170,8 @@ let unify lrefs ty1 ty2 =
     let ty1 = repr ty1 and ty2 = repr ty2 in
       if ty1 == ty2 then () else
         match ty1,ty2 with
-          | TyMva({contents=NoLink(r1,_)} as l1),
-            TyMva({contents=NoLink(r2,_)} as l2) ->
+          | TyMva({contents=NoLink(_,r1)} as l1),
+            TyMva({contents=NoLink(_,r2)} as l2) ->
               if r1 > r2 then (
                 l1 := link_to ty2 r1;
                 lrefs := l1::!lrefs
@@ -174,10 +179,10 @@ let unify lrefs ty1 ty2 =
                 l2 := link_to ty1 r2;
                 lrefs := l2::!lrefs
               )
-          | TyMva({contents=NoLink(r1,_)} as l1), _ ->
+          | TyMva({contents=NoLink(_,r1)} as l1), _ ->
               l1 := link_to ty2 r1;
               lrefs := l1::!lrefs
-          | _, TyMva({contents=NoLink(r2,_)} as l2) ->
+          | _, TyMva({contents=NoLink(_,r2)} as l2) ->
               l2 := link_to ty1 r2;
               lrefs := l2::!lrefs
           | TyCon(tc1,tys1),TyCon(tc2,tys2) when tc1 = tc2 ->
@@ -203,10 +208,10 @@ let occur_check lrefs ty =
   in walk ty
 
 (** 型付けを行う *)
-let typeof lrefs tmctx tm =
-  let rec walk (tmctx,tyctx as ctxs) rank = function
+let typeof lrefs ctx tm =
+  let rec walk ctx rank = function
     | TmVar x as tm ->
-        instanciate rank tm (Context.get_typ tmctx x)
+        instanciate rank tm (Context.get_typ ctx x)
     | TmMem _ -> assert false (* プログラムテキスト中には出現しない *)
     | TmCon(c,vs) as tm ->
         tm,snd(instanciate rank tm (Const.to_type c))
@@ -214,8 +219,8 @@ let typeof lrefs tmctx tm =
         let bs,_ = List.split bs in
         let ts = List.map (fun _ -> fresh_mvar rank) bs in
         let bts = List.map2 (fun b t -> (b,Some t)) bs ts in
-        let tmctx' = Context.add_typebinds tmctx bs ts in
-        let tm',ty2 = walk (tmctx',tyctx) rank tm in
+        let ctx' = Context.add_typebinds ctx bs ts in
+        let tm',ty2 = walk ctx' rank tm in
         let ty1 =
           match ts with
             | []   -> assert false (* 空の束縛は無い *)
@@ -225,48 +230,44 @@ let typeof lrefs tmctx tm =
           TmAbs(bts,tm'),tarrow ty1 ty2
     | TmApp(tm1,tm2) ->
         let ty = fresh_mvar rank in
-        let tm1,ty1 = walk ctxs rank tm1 in
-        let tm2,ty2 = walk ctxs rank tm2 in
+        let tm1,ty1 = walk ctx rank tm1 in
+        let tm2,ty2 = walk ctx rank tm2 in
           unify lrefs ty1 (tarrow ty2 ty);
           occur_check lrefs ty1;
           TmApp(tm1,tm2),ty
     | TmLet([b,_],tm1,tm2) ->
-        let tm1',ty1 = walk ctxs (rank + 1) tm1 in
-        let tm1',ty1' = generalize (rank + 1) tm1' b ty1 in
-        let tmctx' = Context.add_typebind tmctx b ty1' in
-        let tm2',ty2 = walk (tmctx',tyctx) rank tm2 in
+        let tm1',ty1 = walk ctx (rank + 1) tm1 in
+        let tm1',ty1' = generalize ctx (rank + 1) tm1' b ty1 in
+        let ctx' = Context.add_typebind ctx b ty1' in
+        let tm2',ty2 = walk ctx' rank tm2 in
           TmLet([b,Some ty1'],tm1',tm2'),ty2
     | TmLet(bs,tm1,tm2) ->
         let bs,_ = List.split bs in
-        let tm1',ty1 = walk ctxs (rank + 1) tm1 in
-        let ts =
-          match ty1 with
-            | TyCon(TyCTpl,ts) -> ts
-            | _ -> raise (Not_tuple !lrefs)
-        in
-        let tm1',ts' = generalizes (rank + 1) tm1' bs ts in
-        let bts = List.map2 (fun b t -> (b,Some t)) bs ts' in
-        let tmctx' = Context.add_typebinds tmctx bs ts' in
-        let tm2',ty2 = walk (tmctx',tyctx) rank tm2 in
-          TmLet(bts,tm1',tm2'),ty2
+        let ts = List.map (fun _ -> fresh_mvar rank) bs in
+        let tm1',ty1 = walk ctx (rank + 1) tm1 in
+          unify lrefs ty1 (TyCon(TyCTpl,ts));
+          let tm1',ts' = generalizes ctx (rank + 1) tm1' bs ts in
+          let bts = List.map2 (fun b t -> (b,Some t)) bs ts' in
+          let ctx' = Context.add_typebinds ctx bs ts' in
+          let tm2',ty2 = walk ctx' rank tm2 in
+            TmLet(bts,tm1',tm2'),ty2
     | TmTpl tms ->
-        let tms',tys = List.split(List.map (walk ctxs rank) tms) in
+        let tms',tys = List.split(List.map (walk ctx rank) tms) in
           TmTpl tms',TyCon(TyCTpl,tys)
     | _ -> assert false
   in
-    walk (tmctx,Context.empty) 0 tm
+    walk ctx 0 tm
 
 let typing ctx tm b =
   let lrefs = ref [] in
+  let rank = 0 in
   let tm',ty = typeof lrefs ctx tm in
-    generalize 0 tm' b ty
+    generalize ctx rank tm' b ty
 
 let typings ctx tm bs =
   let lrefs = ref [] in
+  let rank = 0 in
   let tm',ty = typeof lrefs ctx tm in
-  let ts =
-    match ty with
-      | TyCon(TyCTpl,ts) -> ts
-      | _ -> raise (Not_tuple !lrefs)
-  in
-    generalizes 0 tm' bs ts
+  let ts = List.map (fun _ -> fresh_mvar rank) bs in
+    unify lrefs ty (TyCon(TyCTpl,ts));
+    generalizes ctx rank tm' bs ts

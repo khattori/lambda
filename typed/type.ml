@@ -80,7 +80,6 @@ let topt_to_string ctx = function
   | None -> ""
   | Some ty -> sprintf ":%s" (to_string ctx ty)
 
-
 let ( (add_tycon: string -> int -> unit),
       (is_tycon : string -> bool) )
     =

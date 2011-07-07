@@ -16,12 +16,12 @@ let batch_mode_ref = ref false  (* -b *)
 let print_result ctx v ty =
   if not !batch_mode_ref then
     Printf.printf "===> %s: %s\n"
-      (to_string (ctx,ctx) v) (Type.to_string ctx ty)
+      (to_string ctx v) (Type.to_string ctx ty)
 
 let print_bind ctx b tm ty =
   if not !batch_mode_ref then
     Printf.printf "%s = %s: %s\n"
-      (binder_to_string b) (to_string (ctx,ctx) tm) (Type.to_string ctx ty)
+      (binder_to_string b) (to_string ctx tm) (Type.to_string ctx ty)
 
 (** 大域変数を定義する *)
 let def_binds store ctx bs tm =
