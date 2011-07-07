@@ -129,12 +129,10 @@ let generalize ctx rank tm b ty =
     in
       walk ty;
       (
-        List.fold_right (
-          fun (t,mvid) tm -> Absyn.term_gen t mvid tm
-        ) !ts_ref tm,
-        List.fold_right (
-          fun (t,mvid) ty -> Absyn.typ_gen t mvid ty
-        ) !ts_ref ty
+        List.fold_left
+          (fun tm (t,mvid) -> Absyn.term_gen t mvid tm) tm !ts_ref,
+        List.fold_left
+          (fun ty (t,mvid) -> Absyn.typ_gen t mvid ty) ty !ts_ref
       )
   in
     if is_lazy b || is_syntactic_value tm then
