@@ -16,15 +16,15 @@ type tyc =
   | TyCRcd of string list
   | TyCSym of string
 
-type typ =
+type t =
   | TyVar of int
   | TyMva of link ref
-  | TyCon of tyc * typ list
-  | TyAll of string * typ
+  | TyCon of tyc * t list
+  | TyAll of string * t
 and link =
   | NoLink of int * int (* id * rank *)
   | LinkTo of node
-and node = { typ: typ; mutable mark: unit ref; mutable old: int }
+and node = { typ: t; mutable mark: unit ref; mutable old: int }
 
 let tarrow ty1 ty2 = TyCon(TyCArr,[ty1;ty2])
 let tarrows tys =
@@ -70,6 +70,7 @@ let rec to_string ctx = function
       sprintf "{%s}"
         (String.concat ";"
            (List.map2 (fun l t -> sprintf "%s:%s" l (to_string ctx t)) ls ts))
+  | TyCon(TyCSym s,[]) -> s
   | TyCon(TyCSym s,ts) ->
       sprintf "(%s %s)" s (String.concat " " (List.map (to_string ctx) ts))
   | TyAll(s,ty) ->
@@ -83,7 +84,7 @@ let topt_to_string ctx = function
 let ( (add_tycon: string -> int -> unit),
       (is_tycon : string -> bool) )
     =
-  let tycon_table_ref_ = ref [] in
-    ( (fun s arity -> tycon_table_ref_ := (s,arity)::!tycon_table_ref_),
-      (fun s -> List.mem_assoc s !tycon_table_ref_) )
+  let table_ref_ = ref [] in
+    ( (fun s arity -> table_ref_ := (s,arity)::!table_ref_),
+      (fun s -> List.mem_assoc s !table_ref_) )
 

@@ -4,29 +4,12 @@
 open ListAux
 open Printf
 open Context
+open Const
 open Type
 
 exception Parse_error
 exception Multiple_labels of string
 
-(** シンボルの種類 *)
-type kind =
-  | Ctor of int      (** コンストラクタ: アリティ *)
-  | Dtor of int      (** デストラクタ　: アリティ *)
-
-(** 定数項の定義 *)
-type const =
-  | CnInt  of int                (** 整数         *)
-  | CnRea  of float              (** 浮動小数点数 *)
-  | CnStr  of string             (** 文字列       *)
-  | CnSym  of string             (** 定数シンボル *)
-
-(** 定数項を文字列表現に変換する *)
-let const_to_string = function
-  | CnInt i -> sprintf "%d" i
-  | CnRea d -> sprintf "%g" d
-  | CnStr s -> sprintf "%S" s
-  | CnSym s -> s
 
 (** 項の定義 *)
 (*
@@ -59,30 +42,30 @@ let const_to_string = function
 type term =
   | TmVar of int
   | TmMem of int
-  | TmCon of const * term list
-  | TmAbs of (binder * typ option) list * term
+  | TmCon of Const.t * term list
+  | TmAbs of (binder * Type.t option) list * term
   | TmApp of term * term
-  | TmLet of (binder * typ option) list * term * term
+  | TmLet of (binder * Type.t option) list * term * term
   | TmTpl of term list
   | TmRcd of (binder * term) list
   | TmSel of term * string
   | TmCas of term * case list
-  | TmAsc of term * typ
+  | TmAsc of term * Type.t
   | TmTbs of string * term
-  | TmTpp of term * typ
-  | TmOvr of typ * (typ option * term) list
+  | TmTpp of term * Type.t
+  | TmOvr of Type.t * (Type.t option * term) list
 and case =
-  | CsPat of const * term
+  | CsPat of Const.t * term
   | CsDef of term
 (** 項を文字列に変換する *)
 let rec to_string ((tmctx,tyctx) as ctxs) = function
   | TmVar x ->
       sprintf "%s(%d)" (Context.index2name tmctx x) x
   | TmMem m -> sprintf "<%d>" m
-  | TmCon(cn,[]) -> const_to_string cn
+  | TmCon(cn,[]) -> Const.to_string cn
   | TmCon(cn,vs) ->
       sprintf "(%s %s)"
-        (const_to_string cn)
+        (Const.to_string cn)
         (String.concat " " (List.map (to_string ctxs) vs))
   | TmAbs(bs,tm) ->
       let tmctx',s = to_string_binds ctxs bs in
@@ -134,7 +117,7 @@ and to_string_binding ctxs (b,tm) = match b with
   | Eager x -> sprintf "%s = %s" x (to_string ctxs tm)
   | Lazy  x -> sprintf "\\%s = %s" x (to_string ctxs tm)
 and to_string_case ctxs = function
-  | CsPat(c,tm) -> sprintf "%s -> %s" (const_to_string c) (to_string ctxs tm)
+  | CsPat(c,tm) -> sprintf "%s -> %s" (Const.to_string c) (to_string ctxs tm)
   | CsDef tm    -> sprintf "... -> %s" (to_string ctxs tm)
 and to_string_over ((tmctx,tyctx) as ctxs) (topt,tm) =
   sprintf "%s%s" (to_string ctxs tm) (topt_to_string tyctx topt)
@@ -251,9 +234,44 @@ let term_subst_top tm1 tm2 =
 let tytm_subst_top tyS tmT =
   term_shift (-1) (tytm_subst 0 (typ_shift 1 tyS) tmT)
 
+
+(*
+ * is_value: 項が値かどうか判定
+ * 
+ *)
+let rec is_value tm =
+  let rec walk tm =
+    match tm with
+      | TmCon(CnSym s,vs) -> (
+            match List.assoc s !_table_ref with
+              | Ctor _ -> true
+              | Dtor a -> List.length vs < a
+        )
+      | TmTpl(tms) -> List.for_all is_value tms
+      | TmCon _ | TmMem _ | TmAbs _ | TmTbs _ -> true
+      | _ -> false
+  in
+    walk tm
+
 (*
  * is_syntactic_value: 項がsyntacticな値かどうか判定
  *)
 let is_syntactic_value = function
   | TmCon _ | TmAbs _ | TmMem _ -> true
   | _ -> false
+
+(*
+ * check_record: レコードに同一ラベル名が含まれているか判定
+ *)
+let check_record rcd =
+  let xs = List.filter_map (
+    fun (b,_) -> match b with Eager x | Lazy x -> Some x | Wild -> None
+  ) rcd in
+    List.check_dup (fun x -> raise (Multiple_labels x)) xs;
+    rcd
+
+(* 定数項の生成用関数 *)
+let tm_int n    = TmCon(CnInt n,[])
+let tm_rea r    = TmCon(CnRea r,[])
+let tm_str s    = TmCon(CnStr s,[])
+let tm_sym s vs = TmCon(CnSym s,vs)

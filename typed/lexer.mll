@@ -31,7 +31,7 @@
 
   let ident_token s =
     if Const.is_symbol s then
-      CONST(CnSym s)
+      CONST(Const.CnSym s)
     else if Type.is_tycon s then
       TCONST(Type.TyCSym s)
     else
@@ -80,7 +80,7 @@ rule token = parse
            { new_line lexbuf; token lexbuf }
   | operator_char+
            { ident_token(lexeme lexbuf) }
-  | num    { CONST(CnInt(int_of_string(lexeme lexbuf))) }
+  | num    { CONST(Const.CnInt(int_of_string(lexeme lexbuf))) }
   | "\\"   { BACKSLASH }
   (* セパレータ *)
   | "("    { LPAREN }
@@ -92,9 +92,9 @@ rule token = parse
   | "."    { DOT }
   | ","    { COMMA }
   | float_literal
-           { CONST(CnRea(float_of_string(lexeme lexbuf))) }
+           { CONST(Const.CnRea(float_of_string(lexeme lexbuf))) }
   | ";"    { SEMI }
-  | '"'    { CONST(CnStr(string (Buffer.create 0) lexbuf)) }
+  | '"'    { CONST(Const.CnStr(string (Buffer.create 0) lexbuf)) }
   | eof    { EOF }
   | _ as c { raise (Illegal_character c) }
 (* 文字列リテラルの処理 *)

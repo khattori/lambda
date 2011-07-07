@@ -71,30 +71,36 @@ let search_filepath mname =
 *)
 let load_file store fname =
   try
-    let init_ctx = Context.empty in
     let mname = fpath2mname fname in
     let infile = open_in fname in
     let lexbuf = Lexing.from_channel infile in
+    let rec loop ctx =
       try
-        add_loading mname;
-        Lexer.init lexbuf fname;
         let result = Parser.toplevel Lexer.token lexbuf in
-        let cmds = result init_ctx in
-        let ctx = List.fold_left (Command.exec store) init_ctx cmds in
+        let cmd = result ctx in
+        let ctx = Command.exec store ctx cmd in
+          loop ctx
+      with End_of_file -> ctx
+    in
+      add_loading mname;
+      Lexer.init lexbuf fname;
+      try
+        let ctx = loop Context.empty in
           Printf.printf "file '%s' loaded.\n" fname;
           close_in infile;
           add_loaded mname ctx;
           ctx
       with e ->
         Error.report lexbuf.lex_start_p e;
-        del_loaded mname;
         close_in infile;
-        init_ctx
+        Context.empty
   with
     | Sys_error msg ->
-        Printf.printf "Error: %s\n" msg; Context.empty
+        Printf.printf "Error: %s\n" msg;
+        Context.empty
     | Invalid_extname s ->
-        Printf.printf "Error: invalid extension '%s'\n" s; Context.empty
+        Printf.printf "Error: invalid extension '%s'\n" s;
+        Context.empty
 
 (** モジュールを読み込んで評価する *)
 let load_module store mname =

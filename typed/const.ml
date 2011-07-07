@@ -2,7 +2,30 @@
 
 open Printf
 open Context
-open Absyn
+open Type
+
+(** シンボルの種類 *)
+type kind =
+  | Ctor of int      (** コンストラクタ: アリティ *)
+  | Dtor of int      (** デストラクタ　: アリティ *)
+
+(** 定数項の定義 *)
+type t =
+  | CnInt  of int                (** 整数         *)
+  | CnRea  of float              (** 浮動小数点数 *)
+  | CnStr  of string             (** 文字列       *)
+  | CnSym  of string             (** 定数シンボル *)
+
+(** 定数項を文字列表現に変換する *)
+let to_string = function
+  | CnInt i -> sprintf "%d" i
+  | CnRea d -> sprintf "%g" d
+  | CnStr s -> sprintf "%S" s
+  | CnSym s -> s
+
+let tint     = TyCon(TyCSym "Int",   []  )
+let treal    = TyCon(TyCSym "Real",  []  )
+let tstring  = TyCon(TyCSym "String",[]  )
 
 (* コンストラクタ／デストラクタのシンボルテーブル *)
 let _table_ref = ref []
@@ -35,27 +58,16 @@ let arity = function
   | CnSym s ->
       match List.assoc s !_table_ref with Ctor n | Dtor n -> n
 
-(*
- * is_value: 項が値かどうか判定
- * 
- *)
-let rec is_value tm =
-  let rec walk tm =
-    match tm with
-      | TmCon(CnSym s,vs) -> (
-            match List.assoc s !_table_ref with
-              | Ctor _ -> true
-              | Dtor a -> List.length vs < a
-        )
-      | TmCon _ | TmMem _ | TmAbs _ | TmTbs _ -> true
-      | _ -> false
-  in
-    walk tm
+let ( (add_type: string -> Type.t -> unit),
+      (get_type: string -> Type.t) )
+    =
+  let table_ref_ = ref [] in
+    ( (fun s t -> table_ref_ := (s,t)::!table_ref_),
+      (fun s -> List.assoc s !table_ref_) )
 
+let to_type = function
+  | CnInt _ -> tint
+  | CnRea _ -> treal
+  | CnStr _ -> tstring
+  | CnSym s -> get_type s
 
-
-(* 定数項の生成用関数 *)
-let tm_int n    = TmCon(CnInt n,[])
-let tm_rea r    = TmCon(CnRea r,[])
-let tm_str s    = TmCon(CnStr s,[])
-let tm_sym s vs = TmCon(CnSym s,vs)

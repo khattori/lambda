@@ -102,20 +102,29 @@ let _ttor_table = [
   ( "Real",    0 );
   ( "Bool",    0 );
   ( "Ref",     1 );
+  ( "List",    1 );
 ]
-let tvoid   = TyCon(TyCSym "Void",[])
-let tunit   = TyCon(TyCSym "Unit",[])
-let tbool   = TyCon(TyCSym "Bool",[])
-let tint    = TyCon(TyCSym "Int",[])
-let treal   = TyCon(TyCSym "Real",[])
-let tstring = TyCon(TyCSym "String",[])
-let tref ty = TyCon(TyCSym "Ref",[ty])
+let tvoid    = TyCon(TyCSym "Void",  []  )
+let tunit    = TyCon(TyCSym "Unit",  []  )
+let tbool    = TyCon(TyCSym "Bool",  []  )
+let tref ty  = TyCon(TyCSym "Ref",   [ty])
+let tlist ty = TyCon(TyCSym "List",  [ty])
 (* コンストラクタ *)
 let _ctor_table = [
   ( "unit",  (0, tunit) );
   ( "true",  (0, tbool) );
   ( "false", (0, tbool) );
+  ( "nil",   (0, (TyAll("t",tlist(TyVar 0)))) );
+  ( "cons",  (2, (TyAll("t",tarrow (TyVar 0)
+                          (tarrow (tlist(TyVar 0)) (tlist(TyVar 0)))))) );
 ]
+
+(* リスト生成用関数 *)
+let nil  = TmCon(CnSym "nil",[])
+let cons x y = TmApp(TmApp(TmCon(CnSym "cons",[]),x),y)
+let rec list = function
+  | [] -> nil
+  | x::xs -> cons x (list xs)
 
 (* デストラクタ *)
 let _dtor_table = [
@@ -146,11 +155,7 @@ let get_dtor_fun d =
 let _ =
   List.iter (fun (s,(arity,_))   -> Const.add_ctor s arity) _ctor_table;
   List.iter (fun (s,(arity,_,_)) -> Const.add_dtor s arity) _dtor_table;
-  List.iter (fun (s,arity)       -> Type.add_tycon s arity) _ttor_table
+  List.iter (fun (s,arity)       -> Type.add_tycon s arity) _ttor_table;
+  List.iter (fun (s,(_,t))       -> Const.add_type s t) _ctor_table;
+  List.iter (fun (s,(_,_,t))     -> Const.add_type s t) _dtor_table
 
-let typ_table =
-  List.map (fun (s,(_,t)) -> s,t) _ctor_table
-    @ List.map (fun (s,(_,_,t)) -> s,t) _dtor_table
-
-let get_const_type s =
-  List.assoc s typ_table

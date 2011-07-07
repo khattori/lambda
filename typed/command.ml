@@ -8,7 +8,7 @@ type t =
   | Eval of term
   | Use  of string
   | Noop
-and ctor = string * Type.typ list
+and ctor = string * Type.t list
 
 (* バッチモード設定 *)
 let batch_mode_ref = ref false  (* -b *)
@@ -53,8 +53,8 @@ let def_binds store ctx bs tm =
 
 (* ロード関数のテーブル定義 *)
 type loader_t = {
-  mutable load_module : string -> (term, Type.typ) Context.t;
-  mutable use_module  : string -> (term, Type.typ) Context.t;
+  mutable load_module : string -> (term, Type.t) Context.t;
+  mutable use_module  : string -> (term, Type.t) Context.t;
 }
 let dummy_loader f = assert false
 

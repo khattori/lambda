@@ -30,7 +30,7 @@
 %token EQ
 %token WILDCARD
 %token <string>        IDENT
-%token <Absyn.const>   CONST
+%token <Const.t>       CONST
 %token <Type.tyc>      TCONST
 
 %nonassoc IN
@@ -44,7 +44,7 @@
 %nonassoc DOT
 
 %start toplevel
-%type <(Absyn.term, Type.typ) Context.t -> Command.t> toplevel
+%type <(Absyn.term, Type.t) Context.t -> Command.t> toplevel
 %%
 
 toplevel
@@ -79,32 +79,28 @@ ctor_def
   : IDENT type_expression_list { fun ctx -> $1,List.rev($2 ctx) }
 ;
 type_expression_list
-  : /* empty */                                 { []     }
-  | type_expression_list atomic_type_expression { $2::$1 }
+  : /* empty */                                 { fun ctx -> []              }
+  | type_expression_list atomic_type_expression { fun ctx -> $2 ctx ::$1 ctx }
 ;
 type_expression
   : atomic_type_expression { $1 }
   | atomic_type_expression RARROW type_expression
-      { fun ctx -> TyCon(TyCArr,[$1 ctx;$3 ct]) }
+      { fun ctx -> Type.TyCon(Type.TyCArr,[$1 ctx;$3 ctx]) }
   | TCONST type_expression_list
-      { fun ctx -> TyCon($1,List.rev($2 ctx)) }
+      { fun ctx -> Type.TyCon($1,List.rev($2 ctx)) }
 ;
 
 atomic_type_expression
-  : IDENT { fun ctx -> TyVar(Context.name2index $1) }
+  : IDENT { fun ctx -> Type.TyVar(Context.name2index ctx $1) }
   | LPAREN type_expression RPAREN { $2 }
 ;
 
 binder_list
-  : binder_comma_list {
-      fun ctx ->
-        let bs = List.rev ($1 ctx) in
-          bs, Context.add_binds ctx bs
-    }
+  : binder_comma_list { List.rev $1 }
 ;
 binder_comma_list
-  : binder                         { fun ctx -> [$1] }
-  | binder_comma_list COMMA binder { fun ctx -> $3::$1 ctx }
+  : binder                         { [$1]   }
+  | binder_comma_list COMMA binder { $3::$1 }
 ;
 binder
   : WILDCARD        { Wild }
@@ -119,13 +115,15 @@ expression
     }
   | LET binder_list EQ expression IN expression {
       fun ctx ->
-        let ctx' = Context.add_bind ctx $2 in
-          TmLet($2,None,$4 ctx,$6 ctx')
+        let ctx' = Context.add_binds ctx $2 in
+        let bts = List.map (fun b -> b,None) $2 in
+          TmLet(bts,$4 ctx,$6 ctx')
     }
   | BACKSLASH binder_list DOT expression {
       fun ctx ->
-        let ctx' = Context.add_bind ctx $2 in
-          TmAbs($2,None,$4 ctx')
+        let ctx' = Context.add_binds ctx $2 in
+        let bts = List.map (fun b -> b,None) $2 in
+          TmAbs(bts,$4 ctx')
     }
   | CASE expression OF case_list {
       fun ctx -> TmCas($2 ctx, $4 ctx)
@@ -133,18 +131,17 @@ expression
 ;
 
 case_list
-  : pattern_case %prec below_VBAR { fun ctx -> [$1 ctx]       }
-  | default_case %prec below_VBAR { fun ctx -> [$1 ctx]       }
-  | pattern_case VBAR case_list   { fun ctx -> $1 ctx::$3 ctx }
+  : pattern_case %prec below_VBAR { fun ctx -> [$1 ctx]             }
+  | default_case %prec below_VBAR { fun ctx -> [$1 ctx]             }
+  | pattern_case VBAR case_list   { fun ctx -> $1 ctx::$3 ctx       }
 ;
 pattern_case
-  : CONST RARROW expression { fun ctx -> PatnCase($1,$3 ctx) }
+  : CONST RARROW expression { fun ctx -> CsPat($1,$3 ctx)           }
   | IDENT RARROW expression { fun ctx ->
-                                let s = $1 in
-                                  PatnCase(CnSym s,$3 ctx)   }
+                                let s = $1 in CsPat(Const.CnSym s,$3 ctx) }
 ;
 default_case
-  : DDDOT RARROW expression { fun ctx -> DeflCase($3 ctx)    }
+  : DDDOT RARROW expression { fun ctx -> CsDef($3 ctx)              }
 ;
 
 apply_expression
@@ -158,7 +155,7 @@ atomic_expression
   | LPAREN expression RPAREN    { $2 }
   | LBRACE record RBRACE        { fun ctx -> TmRcd(check_record($2 ctx)) }
   | LBRACE list RBRACE          { fun ctx -> $2 ctx }
-  | LBRACE RBRACE               { fun ctx -> Prims.nil }
+  | LBRACE RBRACE               { fun ctx -> Prims.tm_unit }
   | LPAREN RPAREN               { fun ctx -> Prims.tm_unit }
 ;
 record

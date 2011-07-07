@@ -204,19 +204,12 @@ let occur_check lrefs ty =
 
 (** 型付けを行う *)
 let typeof lrefs tmctx tm =
-  let typeof_const c vs =
-    match c with
-      | CnInt _ -> tint
-      | CnRea _ -> treal
-      | CnStr _ -> tstring
-      | CnSym s -> Prims.get_const_type s
-  in
   let rec walk (tmctx,tyctx as ctxs) rank = function
     | TmVar x as tm ->
         instanciate rank tm (Context.get_typ tmctx x)
     | TmMem _ -> assert false (* プログラムテキスト中には出現しない *)
     | TmCon(c,vs) as tm ->
-        tm,snd(instanciate rank tm (typeof_const c vs))
+        tm,snd(instanciate rank tm (Const.to_type c))
     | TmAbs(bs,tm) ->
         let bs,_ = List.split bs in
         let ts = List.map (fun _ -> fresh_mvar rank) bs in
@@ -256,6 +249,9 @@ let typeof lrefs tmctx tm =
         let tmctx' = Context.add_typebinds tmctx bs ts' in
         let tm2',ty2 = walk (tmctx',tyctx) rank tm2 in
           TmLet(bts,tm1',tm2'),ty2
+    | TmTpl tms ->
+        let tms',tys = List.split(List.map (walk ctxs rank) tms) in
+          TmTpl tms',TyCon(TyCTpl,tys)
     | _ -> assert false
   in
     walk (tmctx,Context.empty) 0 tm
