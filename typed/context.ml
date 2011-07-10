@@ -3,7 +3,6 @@
     - De Bruijinインデックスの変換
     - 大域変数の定義
 *)
-
 open ListAux
 
 (** 同一の変数名が一度に多重定義された *)
@@ -122,3 +121,4 @@ let get_typ ctx x =
     | TermBind(_,ty,_) -> ty
     | TypeBind ty -> ty
     | _ -> assert false
+

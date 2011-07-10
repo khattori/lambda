@@ -29,6 +29,8 @@
 %token RBRACKET
 %token EQ
 %token WILDCARD
+%token <int>           NTH
+%token <string>        SEL
 %token <string>        IDENT
 %token <Const.t>       CONST
 %token <Type.tyc>      TCONST
@@ -55,7 +57,7 @@ toplevel
 
 command
   : expression                    { fun ctx -> Eval($1 ctx)            }
-  | DEF binder_list EQ expression { fun ctx -> Defn($2,$4 ctx)         }
+  | DEF binder EQ expression      { fun ctx -> Defn($2,$4 ctx)         }
   | DATA IDENT ident_list EQ ctor_def_list
       {
         fun ctx ->
@@ -95,13 +97,6 @@ atomic_type_expression
   | LPAREN type_expression RPAREN { $2 }
 ;
 
-binder_list
-  : binder_comma_list { List.rev $1 }
-;
-binder_comma_list
-  : binder                         { [$1]   }
-  | binder_comma_list COMMA binder { $3::$1 }
-;
 binder
   : WILDCARD        { Wild }
   | IDENT           { Eager $1 }
@@ -111,19 +106,17 @@ binder
 expression
   : apply_expression { $1 }
   | expression_comma_list %prec below_COMMA {
-      fun ctx -> TmTpl(List.rev($1 ctx))
+      fun ctx -> tm_tuple(List.rev($1 ctx))
     }
-  | LET binder_list EQ expression IN expression {
+  | LET binder EQ expression IN expression {
       fun ctx ->
-        let ctx' = Context.add_binds ctx $2 in
-        let bts = List.map (fun b -> b,None) $2 in
-          TmLet(bts,$4 ctx,$6 ctx')
+        let ctx' = Context.add_bind ctx $2 in
+          TmLet(($2,None),$4 ctx,$6 ctx')
     }
-  | BACKSLASH binder_list DOT expression {
+  | BACKSLASH binder DOT expression {
       fun ctx ->
-        let ctx' = Context.add_binds ctx $2 in
-        let bts = List.map (fun b -> b,None) $2 in
-          TmAbs(bts,$4 ctx')
+        let ctx' = Context.add_bind ctx $2 in
+          TmAbs(($2,None),$4 ctx')
     }
   | CASE expression OF case_list {
       fun ctx -> TmCas($2 ctx, $4 ctx)
@@ -152,15 +145,17 @@ apply_expression
 atomic_expression
   : IDENT                       { fun ctx -> TmVar(Context.name2index ctx $1) }
   | CONST                       { fun ctx -> TmCon($1,[]) }
+  | NTH                         { fun ctx -> TmCon(Const.CnNth $1,[]) }
+  | SEL                         { fun ctx -> TmCon(Const.CnSel $1,[]) }
   | LPAREN expression RPAREN    { $2 }
-  | LBRACE record RBRACE        { fun ctx -> TmRcd(check_record($2 ctx)) }
+  | LBRACE record RBRACE        { fun ctx -> tm_record($2 ctx) }
   | LBRACE list RBRACE          { fun ctx -> $2 ctx }
-  | LBRACE RBRACE               { fun ctx -> Prims.tm_unit }
-  | LPAREN RPAREN               { fun ctx -> Prims.tm_unit }
+  | LBRACE RBRACE               { fun ctx -> Prims.nil  }
+  | LPAREN RPAREN               { fun ctx -> Prims.unit }
 ;
 record
-  : binder EQ expression             { fun ctx -> [$1,$3 ctx] }
-  | binder EQ expression SEMI record { fun ctx -> ($1,$3 ctx)::$5 ctx}
+  : IDENT EQ expression             { fun ctx -> [$1,$3 ctx] }
+  | IDENT EQ expression SEMI record { fun ctx -> ($1,$3 ctx)::$5 ctx}
 ;
 list
   : expression_semi_list { fun ctx -> Prims.list(List.rev($1 ctx)) }

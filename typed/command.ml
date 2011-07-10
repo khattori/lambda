@@ -3,7 +3,7 @@ open Absyn
 
 (* コマンド定義 *)
 type t =
-  | Defn of binder list * term
+  | Defn of binder * term
   | Data of string * string list * ctor list
   | Eval of term
   | Use  of string
@@ -24,32 +24,17 @@ let print_bind ctx b tm ty =
       (binder_to_string b) (to_string ctx tm) (Type.to_string ctx ty)
 
 (** 大域変数を定義する *)
-let def_binds store ctx bs tm =
-  let rec iter bts tms o ctx' = match bts,tms with
-    | [],[] -> ctx'
-    | (Wild as b,ty)::bs',tm::tms' ->
-        let v = Core.eval ctx store tm in
-          print_bind ctx b v ty;
-          iter bs' tms' o ctx'
-    | ((Eager x) as b,ty)::bs',tm::tms' ->
-        let v = Core.eval ctx store tm in
-          print_bind ctx b v ty;
-          iter bs' tms' (o + 1) (Context.add_term ctx' x v ty o)
-    | ((Lazy x) as b,ty)::bs',tm::tms' ->
-        print_bind ctx b tm ty;
-        iter bs' tms' (o + 1) (Context.add_term ctx' x tm ty o)
-    | _ -> assert false
-  in
-    match bs with
-      | [b] ->
-          let tm',ty = Core.typing ctx tm b in
-            iter [b,ty] [tm'] 1 ctx
-      | bs ->
-          let tm',tys = Core.typings ctx tm bs in
-          let bts = List.combine bs tys in
-            match Core.eval_tuple ctx store tm' with
-              | TmTpl tms -> iter bts tms 1 ctx
-              | _ -> assert false
+let def_bind store ctx b tm =
+  let tm',ty = Core.typing ctx tm b in
+    match b with
+    | Wild ->
+        let v = Core.eval ctx store tm' in
+          print_bind ctx b v ty; ctx
+    | Eager x ->
+        let v = Core.eval ctx store tm' in
+          print_bind ctx b v ty; (Context.add_term ctx x v ty 1)
+    | Lazy x ->
+        print_bind ctx b tm' ty; (Context.add_term ctx x tm' ty 1)
 
 (* ロード関数のテーブル定義 *)
 type loader_t = {
@@ -89,8 +74,8 @@ let exec store ctx cmd =
           print_result ctx tm' ty;
           print_result ctx v ty;
           ctx
-    | Defn(bs,tm) ->
-        def_binds store ctx bs tm
+    | Defn(b,tm) ->
+        def_bind store ctx b tm
     | Data _ -> ctx
     | Use name -> ctx
     | Noop -> ctx

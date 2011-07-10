@@ -30,9 +30,9 @@
    }
 
   let ident_token s =
-    if Const.is_symbol s then
+    if Const.is_symbol_const s then
       CONST(Const.CnSym s)
-    else if Type.is_tycon s then
+    else if Type.is_symbol_tycon s then
       TCONST(Type.TyCSym s)
     else
       IDENT s
@@ -52,11 +52,13 @@ let sign  = ['+' '-']
 let digit = '0' | nonzero_digit
 let hexdg = ['0'-'9' 'a'-'f' 'A'-'F']
 let octdg = ['0'-'7']
-let num = nonzero_digit digit* | '0'
+let pnum = nonzero_digit digit*
+let num  = pnum | '0'
 let float_literal = digit+ '.' digit+ (['e' 'E'] sign? digit+)*
 
 let ident_char_head = alpha | '_'
 let ident_char  = ident_char_head | digit | ['\'' '?' '!']
+let ident = ident_char_head ident_char*
 let operator_char =
   ['!' '$' '%' '&' '*' '+' '-' '/' ':' '<' '=' '>' '?' '@' '^' '|' '~']
 
@@ -64,19 +66,18 @@ rule token = parse
   | blank+  { token lexbuf }
   | newline { new_line lexbuf; token lexbuf }
   | "_"     { WILDCARD }
-  | ident_char_head ident_char*
-      {
-        let s = lexeme lexbuf in
-          if List.mem_assoc s keyword_table then
-            List.assoc s keyword_table
-          else
-            ident_token s
-      }
+  | ident   { let s = lexeme lexbuf in
+                if List.mem_assoc s keyword_table then
+                  List.assoc s keyword_table
+                else
+                  ident_token s                         }
   | "|"    { VBAR }
   | "->"   { RARROW }
   | "..."  { DDDOT }
   | "="    { EQ }
-  | "#" nonnl* newline
+  | "#" (pnum as n)  { NTH(int_of_string n) }
+  | "#" (ident as l) { SEL l }
+  | "//" nonnl* newline
            { new_line lexbuf; token lexbuf }
   | operator_char+
            { ident_token(lexeme lexbuf) }

@@ -37,18 +37,14 @@ exception Multiple_labels of string
   b ::= x | \x | _
   Ks ::= T1 => E1 |...| Tn => En
        | T1 => E1 |...| Tn => En | ... -> E
-  
 *)
 type term =
   | TmVar of int
   | TmMem of int
   | TmCon of Const.t * term list
-  | TmAbs of (binder * Type.t option) list * term
+  | TmAbs of (binder * Type.t option) * term
   | TmApp of term * term
-  | TmLet of (binder * Type.t option) list * term * term
-  | TmTpl of term list
-  | TmRcd of (binder * term) list
-  | TmSel of term * string
+  | TmLet of (binder * Type.t option) * term * term
   | TmCas of term * case list
   | TmAsc of term * Type.t
   | TmTbs of string * term
@@ -72,26 +68,31 @@ let rec to_string ctx = function
   | TmCon(cn,[]) -> Const.to_string cn
   | TmCon(CnSym s,vs) when is_list s vs ->
       sprintf "{%s}" (String.concat "; " (to_string_list ctx vs))
+  | TmCon(CnTpl n,vs) ->
+      sprintf "(%s%s)"
+        (String.concat ", " (List.map (to_string ctx) vs))
+        (if List.length vs < n then
+           sprintf ",<%d>" (n - (List.length vs))
+         else
+           "")
+  | TmCon(CnRcd ls,vs) ->
+      sprintf "{%s}"
+        (String.concat "; "
+           (List.map2_unb
+              (fun l v -> sprintf "%s = %s" l (to_string ctx v)) ls vs))
   | TmCon(cn,vs) ->
       sprintf "(%s %s)"
         (Const.to_string cn)
         (String.concat " " (List.map (to_string ctx) vs))
-  | TmAbs(bs,tm) ->
-      let ctx',s = to_string_binds ctx bs in
-        sprintf "(\\%s.%s)" s (to_string ctx' tm)
+  | TmAbs((b,topt),tm) ->
+      let ctx',s = to_string_bind ctx b in
+        sprintf "(\\%s%s.%s)" s (topt_to_string ctx topt) (to_string ctx' tm)
   | TmApp(tm1,tm2) ->
       sprintf "(%s %s)" (to_string ctx tm1) (to_string ctx tm2)
-  | TmLet(bs,tm1,tm2) ->
-      let ctx',s = to_string_binds ctx bs in
-        sprintf "(let %s = %s in %s)"
-          s (to_string ctx tm1) (to_string ctx' tm2)
-  | TmTpl tms ->
-        sprintf "(%s)" (String.concat ", " (List.map (to_string ctx) tms))
-  | TmRcd rcd ->
-      sprintf "{ %s }"
-        (String.concat "; " (List.map (to_string_binding ctx) rcd))
-  | TmSel(tm1,l) ->
-      sprintf "%s.%s" (to_string ctx tm1) l
+  | TmLet((b,topt),tm1,tm2) ->
+      let ctx',s = to_string_bind ctx b in
+        sprintf "(let %s%s = %s in %s)"
+          s (topt_to_string ctx topt) (to_string ctx tm1) (to_string ctx' tm2)
   | TmCas(tm1,cs) ->
       sprintf "(case %s of %s)"
         (to_string ctx tm1)
@@ -156,23 +157,19 @@ let term_map onvar ontyp c tm =
     | TmVar x           -> onvar c x
     | TmMem _           -> tm
     | TmCon(cn,vs)      -> TmCon(cn,List.map (walk c) vs)
-    | TmAbs(bs,tm')     -> TmAbs(bs_map c bs,walk (c + List.length bs) tm')
+    | TmAbs(bt,tm')     -> TmAbs(bt_map c bt,walk (c + 1) tm')
     | TmApp(tm1,tm2)    -> TmApp(walk c tm1,walk c tm2)
-    | TmLet(bs,tm1,tm2) ->
-        TmLet(bs_map c bs,walk c tm1,walk (c + List.length bs) tm2)
-    | TmTpl(ts)         -> TmTpl(List.map (walk c) ts)
-    | TmRcd(bs)         -> TmRcd(List.map (fun (b,t) -> b,walk c t) bs)
-    | TmSel(tm,l)       -> TmSel(walk c tm,l)
+    | TmLet(bt,tm1,tm2) ->
+        TmLet(bt_map c bt,walk c tm1,walk (c + 1) tm2)
     | TmCas(tm,cs)      -> TmCas(walk c tm, cs_map c cs)
     | TmAsc(tm,ty)      -> TmAsc(walk c tm,ontyp c ty)
     | TmOvr(ty,os)      -> TmOvr(ontyp c ty,os_map c os)
     | TmTbs(t,tm')      -> TmTbs(t,walk (c+1) tm')
     | TmTpp(tm1,ty2)    -> TmTpp(walk c tm1,ontyp c ty2)
-  and bs_map c =
-    List.map
-      (fun (b,topt) -> match topt with
-         | None     -> b,None
-         | Some ty1 -> b,Some(ontyp c ty1))
+  and bt_map c (b,topt) =
+    match topt with
+      | None     -> b,None
+      | Some ty1 -> b,Some(ontyp c ty1)
   and cs_map c =
     List.map (function
                 | CsPat(con,t) -> CsPat(con,walk c t)
@@ -265,44 +262,47 @@ let term_gen s mvid tm =
 let typ_gen s mvid ty =
   TyAll(s,typ_mvar2tyvar mvid 0 (typ_shift 1 ty))
 
-
 (*
  * is_value: 項が値かどうか判定
  * 
  *)
-let rec is_value tm =
-  let rec walk tm =
-    match tm with
-      | TmCon(CnSym s,vs) -> (
-            match List.assoc s !_table_ref with
-              | Ctor _ -> true
-              | Dtor a -> List.length vs < a
-        )
-      | TmTpl(tms) -> List.for_all is_value tms
-      | TmCon _ | TmMem _ | TmAbs _ | TmTbs _ -> true
-      | _ -> false
+let is_value tm =
+  let rec walk = function
+    | TmCon(c,vs) -> Const.is_value c vs
+    | TmMem _ | TmAbs _ | TmTbs _ -> true
+    | _ -> false
   in
     walk tm
 
 (*
  * is_syntactic_value: 項がsyntacticな値かどうか判定
  *)
-let is_syntactic_value = function
-  | TmCon _ | TmAbs _ | TmMem _ -> true
+let rec is_syntactic_value = function
+  | TmVar _ | TmCon _ | TmAbs _ | TmMem _ | TmTbs _ -> true
+  | TmTpp(tm,_) -> is_syntactic_value tm
+  | tm -> is_ctor_term tm
+and is_ctor_term = function
+  | TmCon(c,_) -> is_ctor c
+  | TmApp(c,tm) when is_ctor_term c -> is_syntactic_value tm
   | _ -> false
-
-(*
- * check_record: レコードに同一ラベル名が含まれているか判定
- *)
-let check_record rcd =
-  let xs = List.filter_map (
-    fun (b,_) -> match b with Eager x | Lazy x -> Some x | Wild -> None
-  ) rcd in
-    List.check_dup (fun x -> raise (Multiple_labels x)) xs;
-    rcd
 
 (* 定数項の生成用関数 *)
 let tm_int n    = TmCon(CnInt n,[])
 let tm_rea r    = TmCon(CnRea r,[])
 let tm_str s    = TmCon(CnStr s,[])
 let tm_sym s vs = TmCon(CnSym s,vs)
+
+let vararg_ctor cn tms =
+  let rec iter tm = function
+    | [] -> tm
+    | x::xs -> iter (TmApp(tm,x)) xs
+  in
+    iter (TmCon(cn,[])) tms
+
+let tm_tuple tms =
+  vararg_ctor (CnTpl(List.length tms)) tms
+let tm_record lts =
+  let ls,tms = List.split lts in
+    List.check_dup (fun l -> raise (Multiple_labels l)) ls;
+    vararg_ctor (CnRcd ls) tms
+

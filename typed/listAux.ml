@@ -31,6 +31,12 @@ let check_dup f xs =
   in
     iter xs
 
+let rec map2_unb f xs ys =
+  match (xs,ys) with
+    | xs,[] -> xs
+    | (x::xs,y::ys) -> let r = f x y in r::map2_unb f xs ys
+    | _ -> invalid_arg "ListAux.map2_unb"
+
 (** 3つのリストを1つのリストに写像する *)
 (* map3: ('a -> 'b -> 'c -> 'd) -> 'a list -> 'b list -> 'c list -> 'd list *)
 let rec map3 f xs ys zs =
@@ -38,6 +44,16 @@ let rec map3 f xs ys zs =
     | [],[],[] -> []
     | (x::xs,y::ys,z::zs) -> let r = f x y z in r::map3 f xs ys zs
     | _ -> invalid_arg "ListAux.map3"
+
+(* make: (int -> 'a) -> int -> 'a list *)
+let make f n =
+  let rec iter i ls =
+    if i < n then
+      iter (i+1) ((f i)::ls)
+    else
+      ls
+  in
+    List.rev(iter 0 [])
 
 end
 
