@@ -164,4 +164,3 @@ let _ =
   List.iter (fun (s,arity)       -> Type.add_tycon s arity) _ttor_table;
   List.iter (fun (s,(_,typ))     -> Type.add_const s typ)   _ctor_table;
   List.iter (fun (s,(_,_,typ))   -> Type.add_const s typ)   _dtor_table
-

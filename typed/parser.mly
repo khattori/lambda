@@ -18,6 +18,7 @@
 %token RARROW
 %token DDDOT
 %token COMMA
+%token COLON
 %token VBAR
 %token SEMI
 %token BACKSLASH
@@ -79,22 +80,49 @@ ctor_def_list
 ;
 ctor_def
   : IDENT type_expression_list { fun ctx -> $1,List.rev($2 ctx) }
+  | IDENT                      { fun ctx -> $1,[]               }
 ;
 type_expression_list
-  : /* empty */                                 { fun ctx -> []              }
-  | type_expression_list atomic_type_expression { fun ctx -> $2 ctx ::$1 ctx }
+  : atomic_type_expression                      { fun ctx -> [$1 ctx]       }
+  | type_expression_list atomic_type_expression { fun ctx -> $2 ctx::$1 ctx }
 ;
 type_expression
   : atomic_type_expression { $1 }
   | atomic_type_expression RARROW type_expression
       { fun ctx -> Type.TyCon(Type.TyCArr,[$1 ctx;$3 ctx]) }
+  | type_expression_comma_list %prec below_COMMA
+      {
+        fun ctx ->
+          let ts = List.rev($1 ctx) in
+            Type.TyCon(Type.TyCTpl(List.length ts),ts)
+      }
   | TCONST type_expression_list
       { fun ctx -> Type.TyCon($1,List.rev($2 ctx)) }
 ;
 
 atomic_type_expression
-  : IDENT { fun ctx -> Type.TyVar(Context.name2index ctx $1) }
+  : IDENT  { fun ctx -> Type.TyVar(Context.name2index ctx $1) }
+  | TCONST { fun ctx -> Type.TyCon($1,[]) }
   | LPAREN type_expression RPAREN { $2 }
+  | LBRACE type_record RBRACE {
+      fun ctx ->
+        let ls,tys = List.split($2 ctx) in
+          Type.TyCon(Type.TyCRcd ls,tys)
+    }
+;
+
+type_expression_comma_list
+  : type_expression COMMA type_expression
+      { fun ctx -> [$3 ctx; $1 ctx] }
+  | type_expression_comma_list COMMA type_expression
+      { fun ctx -> $3 ctx::$1 ctx }
+;
+
+type_record
+  : IDENT COLON type_expression
+      { fun ctx -> [$1,$3 ctx] }
+  | IDENT COLON type_expression SEMI type_record
+      { fun ctx -> ($1,$3 ctx)::$5 ctx}
 ;
 
 binder

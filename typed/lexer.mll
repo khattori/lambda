@@ -75,6 +75,7 @@ rule token = parse
   | "->"   { RARROW }
   | "..."  { DDDOT }
   | "="    { EQ }
+  | ":"    { COLON }
   | "#" (pnum as n)  { NTH(int_of_string n) }
   | "#" (ident as l) { SEL l }
   | "//" nonnl* newline

@@ -65,6 +65,8 @@ let (
 (* use      :モジュールを使用する（未ロードならロードする） *)
 (* load_file:ファイルをロードする（ファイルパス指定）       *)
 
+let mktyc tycnam targs tys =
+  tarrows(tys@[])
 (** コマンド実行 *)
 let exec store ctx cmd =
   match cmd with
@@ -76,6 +78,12 @@ let exec store ctx cmd =
           ctx
     | Defn(b,tm) ->
         def_bind store ctx b tm
-    | Data _ -> ctx
+    | Data(tycnam,targs,ctors) ->
+        Type.add_tycon tycnam (List.length targs);
+        List.iter (fun (ctornam,tys) ->
+                     Const.add_ctor ctornam (List.length tys);
+                     Type.add_const ctornam (mktyc tycnam targs tys)
+                  ) ctors;
+        ctx
     | Use name -> ctx
     | Noop -> ctx
