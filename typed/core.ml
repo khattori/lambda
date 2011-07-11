@@ -7,30 +7,25 @@ open Prims
 
 exception Unify_fail of link ref list
 exception Occur_check of link ref list
+exception Label_fail of string * link ref list
 
 (** 1ステップの評価を行う *)
 (*
  * [構文]
  * 
- * v ::= x | m | \b1,…,bn.t | c v1…vn | v1,…,vn
- * t ::= t1 t 2
- *     | let b1,…,bn = t1 in t2
+ * v ::= x | m | \b1.t | c v1…vn | v1,…,vn
+ * t ::= t1 t2
+ *     | let b = t1 in t2
  *     | case t of c1 -> t1 | … | ... -> t
  *     | t1,…,tn
  * b ::= x | \x | _
  * E ::= []
- *     | E t | (\x.t) E | (\_.t) E | (\bs.t) T
+ *     | E t | (\x.t) E | (\_.t) E
  *     | case E of c1 -> t1 | … | ... -> t
  *     | (v1,…,Ei,…,tn)
- * T ::= []
- *     | E t | (\x.t) E | (\_.t) E | (\bs.t) T
- *     | case E of c1 -> t1 | … | ... -> t
  * 
  * [letの変換]
- * let b1,…,bn = t1 in t2 ⇒ (\b1,…,bn.t2) t1
- * 
- * [tuple適用の変換]
- * (\b1,…,bn.t) (t1,…,tn) ⇒ ((…(((\b1.(\b2.(….(\bn.t)…))) t1) t2)…) tn)
+ * let b = t1 in t2 ⇒ (\b.t2) t1
  * 
  * [β簡約規則]
  * (\_.t) v → v
@@ -71,6 +66,8 @@ let rec eval_step ctx store = function
         term_shift (x + o) tm'
   | TmTpp(TmTbs(x,tm1),ty2) ->
       tytm_subst_top ty2 tm1
+  | TmTpp(TmCon(c,vs),ty2) ->
+      TmCon(c,vs)
   | TmTpp(tm1,ty2) ->
       TmTpp(eval_step ctx store tm1,ty2)
   | _ -> Prims.tm_error "*** no eval rule ***"
@@ -85,23 +82,7 @@ let eval ctx store tm =
       iter (eval_step ctx store tm)
   in
     iter tm
-(*
-let rec teval ctx tm = match tm with
-  | TmVar x ->
-      let tm',o = Context.get_term ctx x in
-        teval ctx (term_shift (x + o) tm')
-  | TmMem _ -> tm
-  | TmCon _ -> tm
-  | TmAbs(bts,tm1) ->
-      let ctx' = Context.add_binds ctx (List.map fst bts) in
-        TmAbs(bts,teval ctx' tm1)
-  | TmApp(tm1,tm2) ->
-      TmApp(teval ctx tm1,teval ctx tm2)
-  | TmLet([b,Some ty],tm1,tm2) ->
-      let tm1' = teval ctx tm1 in
-      let ctx' = Context.add_term ctx 
-      TmLet([b,Some ty],
-*)
+
 let generalize ctx rank tm b ty =
   let generalize_ rank tm ty =
     let id_ref = ref 0 in
@@ -203,7 +184,7 @@ let typeof lrefs ctx tm =
         instanciate rank tm (Context.get_typ ctx x)
     | TmMem _ -> assert false (* プログラムテキスト中には出現しない *)
     | TmCon(c,vs) as tm ->
-        tm,snd(instanciate rank tm (Type.of_const c))
+        instanciate rank tm (Type.of_const c)
     | TmAbs((b,_),tm) ->
         let ty1 = fresh_mvar rank in
         let ctx' = Context.add_typebind ctx b ty1 in
@@ -226,9 +207,74 @@ let typeof lrefs ctx tm =
   in
     walk ctx 0 tm
 
+(*
+  (\<t>.tm1) <ty2> → tm1[t:=ty2]
+  (x <ty1> ... <tyn>)
+  (#l <ty1> <ty2>) → #l --- ty1はフィールドlを含む型，ty2がlの型
+  (#n <ty1> <ty2>) → #n --- ty1はn以上の組型,ty2はn番目の型
+  let x:<t>=>T = \<t>.E in ... x <X> ...
+  | TmVar of int
+  | TmMem of int
+  | TmCon of Const.t * term list
+  | TmAbs of (binder * Type.t option) * term
+  | TmApp of term * term
+  | TmLet of (binder * Type.t option) * term * term
+  | TmCas of term * case list
+  | TmAsc of term * Type.t
+  | TmTbs of string * term
+  | TmTpp of term * Type.t
+  | TmOvr of Type.t * (Type.t option * term) list
+
+*)
+let rec type_eval lrefs ctx = function
+  | (TmVar _ | TmMem _ | TmCon _ | TmTbs _) as tm -> tm
+  | TmAbs((b,topt),tm1) ->
+      let ctx' = Context.add_bind ctx b in
+        TmAbs((b,topt),type_eval lrefs ctx' tm1)
+  | TmApp(tm1,tm2) ->
+      TmApp(type_eval lrefs ctx tm1,type_eval lrefs ctx tm2)
+  | TmLet((b,Some ty),tm1,tm2) ->
+      let tm1' = type_eval lrefs ctx tm1 in
+      let ctx' = Context.add_termbind ctx b tm1' ty 1 in
+        TmLet((b,Some ty),tm1',type_eval lrefs ctx' tm2)
+  | TmTpp(TmTbs(t,tm1),ty2) ->
+      type_eval lrefs ctx (tytm_subst_top ty2 tm1)
+  | TmTpp(TmVar x,ty2) ->
+      let tm',o = Context.get_term ctx x in
+        type_eval lrefs ctx (TmTpp(term_shift (x + o) tm',ty2))
+  | TmTpp(tm1,(TyMva{contents=NoLink _} as ty2)) ->
+      TmTpp(type_eval lrefs ctx tm1,ty2)
+  | TmTpp(tm1,(TyMva{contents=LinkTo{typ=ty2}})) ->
+      type_eval lrefs ctx (TmTpp(tm1,ty2))
+  | TmTpp(tm1,ty2) ->
+      let tm1' = type_apply lrefs ctx tm1 ty2 in
+        type_eval lrefs ctx tm1'
+  | _ -> assert false
+and type_apply lrefs ctx tm ty =
+  match tm with
+    | TmTbs(t,tm1) -> tytm_subst_top ty tm1
+    | TmTpp(TmCon(Const.CnSel l,[]),ty1) ->
+        let ty = repr ty in (
+            match ty with
+              | TyCon(TyCRcd ls,tys) when List.mem l ls ->
+                  let ty' = List.assoc l (List.combine ls tys) in
+                    unify lrefs ty1 ty';
+                    TmCon(Const.CnSel l,[])
+              | _ -> raise (Label_fail(l,!lrefs))
+          )
+    | TmVar x ->
+        let tm',o = Context.get_term ctx x in
+          type_apply lrefs ctx (term_shift (x + o) tm') ty
+    | (TmCon _ | TmTpp _) as tm ->
+        type_eval lrefs ctx tm
+    | _ -> assert false
+
 let typing ctx tm b =
   let lrefs = ref [] in
   let rank = 0 in
-  let tm',ty = typeof lrefs ctx tm in
-    generalize ctx rank tm' b ty
+  let tm,ty = typeof lrefs ctx tm in
+    print_string (Absyn.to_string ctx tm);
+    let tm = type_eval lrefs ctx tm in
+    generalize ctx rank tm b ty
+
 

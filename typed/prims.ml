@@ -95,9 +95,6 @@ let exit_ store = function
 let _ttor_table = [
   ( "Void",    0 );
   ( "Unit",    0 );
-  ( "Int",     0 );
-  ( "String",  0 );
-  ( "Real",    0 );
   ( "Bool",    0 );
   ( "Ref",     1 );
   ( "List",    1 );
@@ -110,12 +107,11 @@ let tlist ty = TyCon(TyCSym "List",  [ty])
 
 (* コンストラクタ *)
 let _ctor_table = [
-  ( "unit",  (0, tunit) );
-  ( "true",  (0, tbool) );
-  ( "false", (0, tbool) );
-  ( "nil",   (0, (TyAll("t",tlist(TyVar 0)))) );
-  ( "cons",  (2, (TyAll("t",tarrow (TyVar 0)
-                          (tarrow (tlist(TyVar 0)) (tlist(TyVar 0)))))) );
+  ( "unit",  (0, make_ctor_type [] "Unit" []) );
+  ( "true",  (0, make_ctor_type [] "Bool" []) );
+  ( "false", (0, make_ctor_type [] "Bool" []) );
+  ( "nil",   (0, make_ctor_type [] "List" ["t"]) ) ;
+  ( "cons",  (2, make_ctor_type [TyVar 0;tlist(TyVar 0)] "List" ["t"]) );
 ]
 
 (* リスト生成用関数 *)

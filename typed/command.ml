@@ -1,3 +1,4 @@
+open ListAux
 open Context
 open Absyn
 
@@ -22,6 +23,18 @@ let print_bind ctx b tm ty =
   if not !batch_mode_ref then
     Printf.printf "%s = %s: %s\n"
       (binder_to_string b) (to_string ctx tm) (Type.to_string ctx ty)
+
+let print_data tycnam targs ctors =
+  if not !batch_mode_ref then
+    let ctx = Context.add_names Context.empty targs in
+      Printf.printf "data %s %s = %s\n"
+        tycnam (String.concat " " targs)
+        (String.concat " | "
+           (List.map (
+              fun (ctornam,tys) ->
+                Printf.sprintf "%s %s" ctornam
+                  (String.concat " "
+                     (List.map (Type.to_string ctx) tys))) ctors))
 
 (** 大域変数を定義する *)
 let def_bind store ctx b tm =
@@ -65,8 +78,7 @@ let (
 (* use      :モジュールを使用する（未ロードならロードする） *)
 (* load_file:ファイルをロードする（ファイルパス指定）       *)
 
-let mktyc tycnam targs tys =
-  tarrows(tys@[])
+
 (** コマンド実行 *)
 let exec store ctx cmd =
   match cmd with
@@ -82,8 +94,10 @@ let exec store ctx cmd =
         Type.add_tycon tycnam (List.length targs);
         List.iter (fun (ctornam,tys) ->
                      Const.add_ctor ctornam (List.length tys);
-                     Type.add_const ctornam (mktyc tycnam targs tys)
+                     Type.add_const
+                       ctornam (Type.make_ctor_type tys tycnam targs)
                   ) ctors;
+        print_data tycnam targs ctors;
         ctx
     | Use name -> ctx
     | Noop -> ctx

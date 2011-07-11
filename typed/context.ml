@@ -95,6 +95,10 @@ let rec fresh_name ctx x =
 *)
 let add_term ctx x tm ty o =
   (x,TermBind(tm,ty,o))::ctx
+let add_termbind ctx b tm ty o =
+  match b with
+    | Wild             -> add_term ctx "_" tm ty o
+    | Eager x | Lazy x -> add_term ctx x tm ty o
 
 let add_typebind ctx b ty =
   match b with
@@ -115,6 +119,10 @@ let get_term ctx x =
   match snd(List.nth ctx x) with
     | TermBind(tm,_,o) -> tm,o
     | _ -> assert false
+let can_get_term ctx x =
+  match snd(List.nth ctx x) with
+    | TermBind(tm,_,_) -> true
+    | _ -> false
 
 let get_typ ctx x =
   match snd(List.nth ctx x) with

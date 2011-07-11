@@ -64,7 +64,7 @@ command
         fun ctx ->
           let xs = List.rev $3 in
           let ctx' = Context.add_names ctx xs in
-          Data($2,$3,$5 ctx')
+          Data($2,xs,List.rev($5 ctx'))
       }
   | USE IDENT                     { fun ctx -> Use $2                  }
   | /* empty */                   { fun ctx -> Noop                    }

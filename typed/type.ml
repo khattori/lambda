@@ -12,12 +12,14 @@ open Printf
 open ListAux
 open Const
 
+(* 型コンストラクタ *)
 type tyc =
   | TyCArr
   | TyCTpl of int
   | TyCRcd of string list
   | TyCSym of string
 
+(* 型式 *)
 type t =
   | TyVar of int
   | TyMva of link ref
@@ -27,35 +29,6 @@ and link =
   | NoLink of int * int (* id * rank *)
   | LinkTo of node
 and node = { typ: t; mutable mark: unit ref; mutable old: int }
-
-let tint           = TyCon(TyCSym "Int",   []  )
-let treal          = TyCon(TyCSym "Real",  []  )
-let tstring        = TyCon(TyCSym "String",[]  )
-
-let tarrow ty1 ty2 = TyCon(TyCArr,[ty1;ty2])
-let tarrows tys =
-  let rec iter = function
-    | [ty] -> ty
-    | t::ts -> tarrow t (iter ts)
-    | [] -> assert false
-  in
-    iter tys
-
-let vararg_ctor tycon n =
-  let rec iter i ty =
-    if i < 0 then
-      ty
-    else
-      iter (i-1) (TyAll(sprintf "t%d" i,ty))
-  in
-  let tvs = List.make (fun i -> TyVar i) n in
-    iter (n-1) (tarrows (tvs@[TyCon(tycon,tvs)]))
-
-let ttuple a =
-  vararg_ctor (TyCTpl a) a
-
-let trecord xs =
-  vararg_ctor (TyCRcd xs) (List.length xs)
 
 let mark() = ref ()
 let no_mark = mark()
@@ -79,6 +52,7 @@ let rec repr = function
       let ty = repr ty in link := link_to ty rank; ty
   | ty -> ty
 
+(** 型を文字列表現に変換 *)
 let rec to_string ctx = function
   | TyVar x -> sprintf "%s(%d)" (Context.index2name ctx x) x
   | TyMva({contents=LinkTo{typ=ty}}) -> to_string ctx ty
@@ -119,6 +93,36 @@ let ( (add_const: string -> t -> unit),
     ( (fun s t -> table_ref_ := (s,t)::!table_ref_),
       (fun s -> List.assoc s !table_ref_) )
 
+
+(* 組込みの型コンストラクタを登録 *)
+let _ =
+  add_tycon "Int"    0;
+  add_tycon "String" 0;
+  add_tycon "Real"   0
+(* 組込みの型コンストラクタのための補助関数定義 *)
+let tint           = TyCon(TyCSym "Int",   []  )
+let treal          = TyCon(TyCSym "Real",  []  )
+let tstring        = TyCon(TyCSym "String",[]  )
+let tarrow ty1 ty2 = TyCon(TyCArr,[ty1;ty2])
+let tarrows tys    =
+  let rec iter = function
+    | [ty] -> ty
+    | t::ts -> tarrow t (iter ts)
+    | [] -> assert false
+  in
+    iter tys
+let vararg_ctor tycon n =
+  let rec iter i ty =
+    if i < 0 then
+      ty
+    else
+      iter (i-1) (TyAll(sprintf "t%d" i,ty))
+  in
+  let tvs = List.make (fun i -> TyVar i) n in
+    iter (n-1) (tarrows (tvs@[TyCon(tycon,tvs)]))
+let ttuple a       = vararg_ctor (TyCTpl a) a
+let trecord xs     = vararg_ctor (TyCRcd xs) (List.length xs)
+
 (** 定数の型を取得 *)
 let of_const = function
   | CnInt _ -> tint
@@ -129,3 +133,12 @@ let of_const = function
   | CnRcd ls-> trecord ls
   | CnSel l -> TyAll("t0",TyAll("t1",tarrow (TyVar 0) (TyVar 1)))
   | CnSym s -> get_type s
+
+(** コンストラクタの型を生成 *)
+let make_ctor_type tys tycnam targs =
+  let tyvars = List.make (fun i -> TyVar i) (List.length targs) in
+  let rec walk = function
+    | []    -> tarrows(tys@[TyCon(TyCSym tycnam,tyvars)])
+    | x::xs -> TyAll(x,walk xs)
+  in
+    walk targs
