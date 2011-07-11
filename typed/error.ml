@@ -34,6 +34,18 @@ let report pos e = (
     | Context.Unbound_name s ->
         fprintf stderr "Unbound name: '%s'" s;
         print_position pos
+    | Core.Unify_fail lrefs ->
+        Printf.fprintf stderr "Type error\n";
+        Core.restore lrefs
+    | Core.Occur_check lrefs ->
+        Printf.fprintf stderr "Occur check\n";
+        Core.restore lrefs
+    | Core.Label_fail(l,lrefs) ->
+        Printf.fprintf stderr "Label not found: '%s'\n" l;
+        Core.restore lrefs
+    | Core.Tuple_fail(i,lrefs) ->
+        Printf.fprintf stderr "Tuple too short: %d\n" i;
+        Core.restore lrefs
     | Failure s ->
         fprintf stderr "Runtime error: %s\n" s
     | exn -> raise exn );

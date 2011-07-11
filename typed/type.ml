@@ -28,12 +28,12 @@ type t =
 and link =
   | NoLink of int * int (* id * rank *)
   | LinkTo of node
-and node = { typ: t; mutable mark: unit ref; mutable old: int }
+and node = { typ: t; mutable mark: unit ref; mutable old: int * int }
 
 let mark() = ref ()
 let no_mark = mark()
 let no_rank = -1
-let link_to ty rank = LinkTo{ typ = ty; mark = no_mark; old = rank }
+let link_to ty id rank = LinkTo{ typ = ty; mark = no_mark; old = (id,rank) }
 
 (** 新しいメタ変数を生成 *)
 let fresh_mvar =
@@ -48,8 +48,8 @@ let fresh_mvar =
 
 (* パス圧縮 *)
 let rec repr = function
-  | TyMva({contents=LinkTo{typ=ty;old=rank}} as link) ->
-      let ty = repr ty in link := link_to ty rank; ty
+  | TyMva({contents=LinkTo{typ=ty;old=(id,rank)}} as link) ->
+      let ty = repr ty in link := link_to ty id rank; ty
   | ty -> ty
 
 (** 型を文字列表現に変換 *)
@@ -64,7 +64,7 @@ let rec to_string ctx = function
   | TyCon(TyCTpl _,ts) ->
       sprintf "(%s)" (String.concat ", " (List.map (to_string ctx) ts))
   | TyCon(TyCRcd ls,ts) ->
-      sprintf "{ %s }"
+      sprintf "{%s}"
         (String.concat "; "
            (List.map2 (fun l t -> sprintf "%s: %s" l (to_string ctx t)) ls ts))
   | TyCon(TyCSym s,[]) -> s
