@@ -298,9 +298,12 @@ let rec type_eval lrefs ctx = function
       let ctx' = Context.add_bind ctx b in
         TmAbs((b,topt),type_eval lrefs ctx' tm1)
   | TmApp(tm1,tm2) ->
-      TmApp(type_eval lrefs ctx tm1,type_eval lrefs ctx tm2)
+      let tm1' = type_eval lrefs ctx tm1 in
+      let tm2' = type_eval lrefs ctx tm2 in
+        TmApp(tm1',tm2')
   | TmCas(tm1,cs) ->
-      TmCas(type_eval lrefs ctx tm1,
+      let tm1' = type_eval lrefs ctx tm1 in
+        TmCas(tm1',
             List.map (
               function
                 | CsPat(cn,tm) -> CsPat(cn,type_eval lrefs ctx tm)
@@ -358,7 +361,8 @@ let typing ctx tm b =
   let lrefs = ref [] in
   let rank = 0 in
   let tm,ty = typeof lrefs ctx tm in
-    let tm = type_eval lrefs ctx tm in
+    print_string (Absyn.to_string ctx tm);
+  let tm = type_eval lrefs ctx tm in
     generalize ctx rank tm b ty
 
 let restore lrefs =
