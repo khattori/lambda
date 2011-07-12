@@ -55,5 +55,9 @@ let make f n =
   in
     List.rev(iter 0 [])
 
+(* cut: int -> 'a list -> 'a list *)
+let rec cut n ls =
+    if n <= 0 then ls else cut (n-1) (tl ls)
+
 end
 

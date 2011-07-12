@@ -95,7 +95,7 @@ let exec store ctx cmd =
         List.iter (fun (ctornam,tys) ->
                      Const.add_ctor ctornam (List.length tys);
                      Type.add_const
-                       ctornam (Type.make_ctor_type tys tycnam targs)
+                       ctornam (Type.make_sym_ctor_type tys tycnam targs)
                   ) ctors;
         print_data tycnam targs ctors;
         ctx

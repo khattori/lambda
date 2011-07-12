@@ -52,6 +52,18 @@ let rec repr = function
       let ty = repr ty in link := link_to ty id rank; ty
   | ty -> ty
 
+let rec result_type ty =
+  let ty = repr ty in match ty with
+    | TyCon(TyCArr,[ty1;ty2]) -> result_type ty2
+    | _ -> ty
+let arg_types ty =
+  let rec iter tys ty =
+    let ty = repr ty in match ty with
+      | TyCon(TyCArr,[ty1;ty2]) -> iter (ty1::tys) ty2
+      | _ -> tys
+  in
+    List.rev(iter [] ty)
+
 (** 型を文字列表現に変換 *)
 let rec to_string ctx = function
   | TyVar x -> sprintf "%s(%d)" (Context.index2name ctx x) x
@@ -99,6 +111,7 @@ let _ =
   add_tycon "Int"    0;
   add_tycon "String" 0;
   add_tycon "Real"   0
+
 (* 組込みの型コンストラクタのための補助関数定義 *)
 let tint           = TyCon(TyCSym "Int",   []  )
 let treal          = TyCon(TyCSym "Real",  []  )
@@ -111,17 +124,24 @@ let tarrows tys    =
     | [] -> assert false
   in
     iter tys
-let vararg_ctor tycon n =
-  let rec iter i ty =
-    if i < 0 then
-      ty
-    else
-      iter (i-1) (TyAll(sprintf "t%d" i,ty))
+
+(** コンストラクタの型を生成 *)
+let make_ctor_type tys tyc targs =
+  let tyvars = List.make (fun i -> TyVar i) (List.length targs) in
+  let rec walk = function
+    | []    -> tarrows(tys@[TyCon(tyc,List.rev tyvars)])
+    | x::xs -> TyAll(x,walk xs)
   in
-  let tvs = List.make (fun i -> TyVar i) n in
-    iter (n-1) (tarrows (tvs@[TyCon(tycon,tvs)]))
-let ttuple a       = vararg_ctor (TyCTpl a) a
-let trecord xs     = vararg_ctor (TyCRcd xs) (List.length xs)
+    walk targs
+let make_sym_ctor_type tys tycnam targs =
+  make_ctor_type tys (TyCSym tycnam) targs
+let make_vararg_ctor_type tycon n =
+  let targs  = List.make (fun i -> sprintf "t%d" i) n in
+  let tyvars = List.make (fun i -> TyVar i) n in
+    make_ctor_type (List.rev tyvars) tycon targs
+
+let ttuple a       = make_vararg_ctor_type (TyCTpl a) a
+let trecord xs     = make_vararg_ctor_type (TyCRcd xs) (List.length xs)
 
 (** 定数の型を取得 *)
 let of_const = function
@@ -134,11 +154,3 @@ let of_const = function
   | CnSel l -> TyAll("t0",TyAll("t1",tarrow (TyVar 0) (TyVar 1)))
   | CnSym s -> get_type s
 
-(** コンストラクタの型を生成 *)
-let make_ctor_type tys tycnam targs =
-  let tyvars = List.make (fun i -> TyVar i) (List.length targs) in
-  let rec walk = function
-    | []    -> tarrows(tys@[TyCon(TyCSym tycnam,tyvars)])
-    | x::xs -> TyAll(x,walk xs)
-  in
-    walk targs

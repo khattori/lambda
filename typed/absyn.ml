@@ -18,9 +18,9 @@ exception Multiple_labels of string
   E ::= x                     (x∈Ident)
       | c v1 ... vn           (c∈Const)
       | m                     (m∈Address)
-      | \Bs.E
+      | \b.E
       | E1 E2
-      | let Bs = E1 in E2
+      | let b = E1 in E2
       | E1,...,En
       | { l1=E1;...;ln=En }   (l∈Label)
       | E.l
@@ -31,9 +31,6 @@ exception Multiple_labels of string
       | over T of Ks
   Cs ::= c1 -> E1 |...| cn -> En
        | c1 -> E1 |...| cn -> En | ... -> E
-  Bs ::= b
-       | b1,...,bn        n ≧ 2
-       | b1,...,bn ...    n ≧ 2
   b ::= x | \x | _
   Ks ::= T1 => E1 |...| Tn => En
        | T1 => E1 |...| Tn => En | ... -> E
@@ -50,9 +47,10 @@ type term =
   | TmTbs of string * term
   | TmTpp of term * Type.t
   | TmOvr of Type.t * (Type.t option * term) list
-and case =
-  | CsPat of Const.t * term
+and case  =
+  | CsPat of const * term
   | CsDef of term
+and const = Const of Const.t * const list
 
 (** 項がリストかどうか判定 *)
 let rec is_list s vs = match s,vs with
@@ -131,8 +129,16 @@ and to_string_binding ctx (b,tm) = match b with
   | Eager x -> sprintf   "%s = %s" x (to_string ctx tm)
   | Lazy  x -> sprintf "\\%s = %s" x (to_string ctx tm)
 and to_string_case ctx = function
-  | CsPat(c,tm) -> sprintf "%s -> %s" (Const.to_string c) (to_string ctx tm)
+  | CsPat(c,tm) ->
+      sprintf "%s -> %s" (to_string_const c) (to_string ctx tm)
   | CsDef tm    -> sprintf "... -> %s" (to_string ctx tm)
+and to_string_const (Const(cn,cs)) =
+  match cs with
+    | [] -> Const.to_string cn
+    | cs ->
+        sprintf "(%s %s)"
+          (Const.to_string cn)
+          (String.concat " " (List.map to_string_const cs))
 and to_string_over ctx (topt,tm) =
   sprintf "%s%s" (to_string ctx tm) (topt_to_string ctx topt)
 
@@ -284,25 +290,28 @@ let rec is_syntactic_value = function
 and is_ctor_term = function
   | TmCon(c,_) -> is_ctor c
   | TmApp(c,tm) when is_ctor_term c -> is_syntactic_value tm
+  | TmTpp(c,_) -> is_ctor_term c
   | _ -> false
 
-(* 定数項の生成用関数 *)
-let tm_int n    = TmCon(CnInt n,[])
-let tm_rea r    = TmCon(CnRea r,[])
-let tm_str s    = TmCon(CnStr s,[])
-let tm_sym s vs = TmCon(CnSym s,vs)
-
-let vararg_ctor cn tms =
-  let rec iter tm = function
+(* 
+ * tm_apps: 入れ子になったλ適用の項を作る
+ * 
+ * E E1...En を ((...((E E1) E2) ...) En)に変換
+ * 
+ *)
+let rec tm_apps tm tms =
+  match tms with
     | [] -> tm
-    | x::xs -> iter (TmApp(tm,x)) xs
-  in
-    iter (TmCon(cn,[])) tms
+    | tm'::tms' -> tm_apps (TmApp(tm,tm')) tms'
 
-let tm_tuple tms =
-  vararg_ctor (CnTpl(List.length tms)) tms
+(* 定数項の生成用関数 *)
+let tm_int n     = TmCon(CnInt n,[])
+let tm_rea r     = TmCon(CnRea r,[])
+let tm_str s     = TmCon(CnStr s,[])
+let tm_sym s vs  = TmCon(CnSym s,vs)
+let tm_tuple tms = tm_apps (TmCon(CnTpl(List.length tms),[])) tms
 let tm_record lts =
   let ls,tms = List.split lts in
     List.check_dup (fun l -> raise (Multiple_labels l)) ls;
-    vararg_ctor (CnRcd ls) tms
+    tm_apps (TmCon(CnRcd ls,[])) tms
 

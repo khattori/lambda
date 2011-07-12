@@ -9,6 +9,36 @@ exception Unify_fail  of link ref list
 exception Occur_check of link ref list
 exception Label_fail  of string * link ref list
 exception Tuple_fail  of int * link ref list
+exception Case_fail   of link ref list
+
+(*
+ * case_reduc: case簡約
+ * 
+ * case c v1…vn of c1 -> t1 | c2 -> t2 | … | cm -> tm | ... -> t
+ * →
+ * - ti v1…vn    --- if c = c2
+ * - t (c v1…vn) --- else
+ *)
+exception Return_term of term
+let case_reduc cn vs cs =
+  let rec const_match cs vs =
+    match cs,vs with
+      | [],_ -> true
+      | Const(cn,cs1)::cs2,TmCon(cn',vs1)::vs2 ->
+          cn = cn' && const_match cs1 vs1 && const_match cs2 vs2
+      | _ -> false
+  in
+    try
+      List.iter (
+      function
+        | CsPat(Const(cn',cs),tm) when cn = cn' && const_match cs vs ->
+            let vs' = List.cut (List.length cs) vs in
+              raise (Return_term(tm_apps tm vs'))
+        | CsDef tm -> raise (Return_term(TmApp(tm,TmCon(cn,vs))))
+        | _ -> ()
+    ) cs;
+    (tm_error "*** no match case ***")
+  with Return_term tm -> tm
 
 (** 1ステップの評価を行う *)
 (*
@@ -65,12 +95,19 @@ let rec eval_step ctx store = function
   | TmVar x ->
       let tm',o = Context.get_term ctx x in
         term_shift (x + o) tm'
-  | TmTpp(TmTbs(x,tm1),ty2) ->
-      tytm_subst_top ty2 tm1
+  | TmCas(TmCon(c,vs),cs) ->
+      case_reduc c vs cs
+  | TmCas(tm1,cs) when not (is_value tm1) ->
+      TmCas(eval_step ctx store tm1,cs)
   | TmTpp(TmCon(c,vs),ty2) ->
       TmCon(c,vs)
   | TmTpp(tm1,ty2) ->
       TmTpp(eval_step ctx store tm1,ty2)
+(*
+  type_evalによって評価済み
+  | TmTpp(TmTbs(x,tm1),ty2) ->
+      tytm_subst_top ty2 tm1
+*)
   | _ -> Prims.tm_error "*** no eval rule ***"
 
 (** 項が値になるまで評価を行う *)
@@ -180,11 +217,18 @@ let occur_check lrefs ty =
 
 (** 型付けを行う *)
 let typeof lrefs ctx tm =
+  let rec walk_const rank (Const(cn,cs)) =
+    let ty1 = snd(instanciate rank (TmCon(cn,[])) (Type.of_const cn)) in
+    let ty2 = fresh_mvar rank in
+    let tys = List.map (walk_const rank) cs in
+      unify lrefs ty1 (tarrows (tys@[ty2]));
+      ty2
+  in
   let rec walk ctx rank = function
     | TmVar x as tm ->
         instanciate rank tm (Context.get_typ ctx x)
     | TmMem _ -> assert false (* プログラムテキスト中には出現しない *)
-    | TmCon(c,vs) as tm ->
+    | TmCon(c,[]) as tm ->
         instanciate rank tm (Type.of_const c)
     | TmAbs((b,_),tm) ->
         let ty1 = fresh_mvar rank in
@@ -204,14 +248,39 @@ let typeof lrefs ctx tm =
         let ctx' = Context.add_typebind ctx b ty1' in
         let tm2',ty2 = walk ctx' rank tm2 in
           TmLet((b,Some ty1'),tm1',tm2'),ty2
+    (*
+      Γ |- E : T
+      Γ |- Ci : Ti1 -> ... Tim -> T  mはCiのアリティ
+      Γ |- Ei : Ti1 -> ... Tim -> T' mはCiのアリティ
+     -------------------------------------------------
+      Γ |- case E of C1 -> E1 | ... | Cn -> En : T'
+    *)
     | TmCas(tm1,cs) ->
         let tm1',ty1 = walk ctx rank tm1 in
-(* Foo a b
-   Foo: a -> b -> foo a b
-   \x.\y.T
-   a -> b -> T
+        let ty2 = fresh_mvar rank in
+        let cs' =
+          List.map (
+            function
+              | CsPat(c,tm) ->
+                  let ty_c = walk_const rank c in
+                  let tm',ty_e = walk ctx rank tm in
+                    unify lrefs ty1 (result_type ty_c);
+                    unify lrefs ty2 (result_type ty_e);
+                    ( try
+                        List.iter2
+                          (unify lrefs) (arg_types ty_c) (arg_types ty_e)
+                      with Invalid_argument _ ->
+                        raise (Case_fail !lrefs) );
+                    CsPat(c,tm')
+              | CsDef tm ->
+                  let tm',ty = walk ctx rank tm in
+                    unify lrefs ty (tarrow ty1 ty2);
+                    CsDef tm'
+          ) cs
+        in
+          TmCas(tm1',cs'),ty2
     | _ -> assert false
-*)
+
   in
     walk ctx 0 tm
 
@@ -230,6 +299,13 @@ let rec type_eval lrefs ctx = function
         TmAbs((b,topt),type_eval lrefs ctx' tm1)
   | TmApp(tm1,tm2) ->
       TmApp(type_eval lrefs ctx tm1,type_eval lrefs ctx tm2)
+  | TmCas(tm1,cs) ->
+      TmCas(type_eval lrefs ctx tm1,
+            List.map (
+              function
+                | CsPat(cn,tm) -> CsPat(cn,type_eval lrefs ctx tm)
+                | CsDef tm     -> CsDef(type_eval lrefs ctx tm)
+            ) cs)
   | TmLet((b,Some ty),tm1,tm2) ->
       let tm1' = type_eval lrefs ctx tm1 in
       let ctx' = Context.add_termbind ctx b tm1' ty 1 in

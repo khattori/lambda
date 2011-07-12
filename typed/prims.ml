@@ -107,11 +107,11 @@ let tlist ty = TyCon(TyCSym "List",  [ty])
 
 (* コンストラクタ *)
 let _ctor_table = [
-  ( "unit",  (0, make_ctor_type [] "Unit" []) );
-  ( "true",  (0, make_ctor_type [] "Bool" []) );
-  ( "false", (0, make_ctor_type [] "Bool" []) );
-  ( "nil",   (0, make_ctor_type [] "List" ["t"]) ) ;
-  ( "cons",  (2, make_ctor_type [TyVar 0;tlist(TyVar 0)] "List" ["t"]) );
+  ( "unit",  (0, make_sym_ctor_type [] "Unit" []) );
+  ( "true",  (0, make_sym_ctor_type [] "Bool" []) );
+  ( "false", (0, make_sym_ctor_type [] "Bool" []) );
+  ( "nil",   (0, make_sym_ctor_type [] "List" ["t"]) ) ;
+  ( "cons",  (2, make_sym_ctor_type [TyVar 0;tlist(TyVar 0)] "List" ["t"]) );
 ]
 
 (* リスト生成用関数 *)

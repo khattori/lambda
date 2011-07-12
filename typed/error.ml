@@ -46,6 +46,9 @@ let report pos e = (
     | Core.Tuple_fail(i,lrefs) ->
         Printf.fprintf stderr "Tuple too short: %d\n" i;
         Core.restore lrefs
+    | Core.Case_fail lrefs ->
+        Printf.fprintf stderr "Case unmatch\n";
+        Core.restore lrefs
     | Failure s ->
         fprintf stderr "Runtime error: %s\n" s
     | exn -> raise exn );

@@ -157,12 +157,17 @@ case_list
   | pattern_case VBAR case_list   { fun ctx -> $1 ctx::$3 ctx       }
 ;
 pattern_case
-  : CONST RARROW expression { fun ctx -> CsPat($1,$3 ctx)           }
-  | IDENT RARROW expression { fun ctx ->
-                                let s = $1 in CsPat(Const.CnSym s,$3 ctx) }
+  : const_expression RARROW expression { fun ctx -> CsPat($1,$3 ctx) }
 ;
 default_case
   : DDDOT RARROW expression { fun ctx -> CsDef($3 ctx)              }
+;
+const_expression
+  : CONST const_expression_list { Const($1,List.rev $2) }
+;
+const_expression_list
+  : /* empty */                 { [] }
+  | const_expression_list CONST { Const($2,[])::$1 }
 ;
 
 apply_expression
