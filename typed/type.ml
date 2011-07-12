@@ -27,6 +27,7 @@ type t =
   | TyAll of string * t
 and link =
   | NoLink of int * int (* id * rank *)
+  | OnUnfy of (t -> unit)
   | LinkTo of node
 and node = { typ: t; mutable mark: unit ref; mutable old: int * int }
 

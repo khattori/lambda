@@ -297,7 +297,7 @@ let rec type_eval lrefs ctx = function
   | TmAbs((b,topt),tm1) ->
       let ctx' = Context.add_bind ctx b in
         TmAbs((b,topt),type_eval lrefs ctx' tm1)
-  | TmApp(tm1,tm2) ->
+  | TmApp(tm1,tm2) -> (* tm1から評価されるのが重要 *)
       let tm1' = type_eval lrefs ctx tm1 in
       let tm2' = type_eval lrefs ctx tm2 in
         TmApp(tm1',tm2')
@@ -326,9 +326,16 @@ and type_apply lrefs ctx tm ty =
         let tm',o = Context.get_term ctx x in
           type_apply lrefs ctx (term_shift (x + o) tm') ty
     | TmTpp(TmCon(Const.CnSel l,[]),ty1) -> let ty = repr ty in (
+        (* TODO:評価順序に依存しないようにunifyする *)
         match ty with
-          | TyMva{contents=NoLink _} ->
-              None
+          | TyMva({contents=NoLink _} as link) ->
+              link :=
+                OnUnfy(function
+                         | TyCon(TyCRcd ls,tys) when List.mem l ls ->
+                             let ty' = List.assoc l (List.combine ls tys) in
+                               unify lrefs ty1 ty';
+                         | _ -> raise (Label_fail(l,!lrefs))
+                      )
           | TyCon(TyCRcd ls,tys) when List.mem l ls ->
               let ty' = List.assoc l (List.combine ls tys) in
                 unify lrefs ty1 ty';
