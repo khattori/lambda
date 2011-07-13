@@ -292,84 +292,72 @@ let typeof lrefs ctx tm =
   let x:<t>=>T = \<t>.E in ... x <X> ...
 
 *)
-let rec type_eval lrefs ctx = function
-  | (TmVar _ | TmMem _ | TmCon _ | TmTbs _) as tm -> tm
-  | TmAbs((b,topt),tm1) ->
-      let ctx' = Context.add_bind ctx b in
-        TmAbs((b,topt),type_eval lrefs ctx' tm1)
-  | TmApp(tm1,tm2) -> (* tm1から評価されるのが重要 *)
-      let tm1' = type_eval lrefs ctx tm1 in
-      let tm2' = type_eval lrefs ctx tm2 in
-        TmApp(tm1',tm2')
-  | TmCas(tm1,cs) ->
-      let tm1' = type_eval lrefs ctx tm1 in
-        TmCas(tm1',
-            List.map (
-              function
-                | CsPat(cn,tm) -> CsPat(cn,type_eval lrefs ctx tm)
-                | CsDef tm     -> CsDef(type_eval lrefs ctx tm)
-            ) cs)
-  | TmLet((b,Some ty),tm1,tm2) ->
-      let tm1' = type_eval lrefs ctx tm1 in
-      let ctx' = Context.add_termbind ctx b tm1' ty 1 in
-        TmLet((b,Some ty),tm1',type_eval lrefs ctx' tm2)
-  | TmTpp(tm1,ty2) -> (
-      match type_apply lrefs ctx tm1 ty2 with
-        | None -> TmTpp(tm1,ty2)
-        | Some tm1' -> type_eval lrefs ctx tm1'
-    )
-  | _ -> assert false
-and type_apply lrefs ctx tm ty =
-  match tm with
-    | TmTbs(t,tm1) -> Some(tytm_subst_top ty tm1)
-    | TmVar x ->
+let type_eval lrefs ctx tm =
+  let changed = ref true in
+  let rec walk ctx = function
+    | (TmVar _ | TmMem _ | TmCon _) as tm -> tm
+    | TmTbs(t,tm) -> TmTbs(t,walk ctx tm)
+    | TmAbs((b,topt),tm1) ->
+        let ctx' = Context.add_bind ctx b in
+          TmAbs((b,topt),walk ctx' tm1)
+    | TmApp(tm1,tm2) ->
+        TmApp(walk ctx tm1,walk ctx tm2)
+    | TmCas(tm1,cs) ->
+        let tm1' = walk ctx tm1 in
+          TmCas(tm1',
+                List.map (
+                  function
+                    | CsPat(cn,tm) -> CsPat(cn,walk ctx tm)
+                    | CsDef tm     -> CsDef(walk ctx tm)
+                ) cs)
+    | TmLet((b,Some ty),tm1,tm2) ->
+        let tm1' = walk ctx tm1 in
+        let ctx' = Context.add_termbind ctx b tm1' ty 1 in
+          TmLet((b,Some ty),tm1',walk ctx' tm2)
+    | TmTpp(TmTbs(t,tm1),ty2) ->
+        changed := true;
+        tytm_subst_top ty2 tm1
+    | TmTpp(TmVar x,ty2) ->
         let tm',o = Context.get_term ctx x in
-          type_apply lrefs ctx (term_shift (x + o) tm') ty
-    | TmTpp(TmCon(Const.CnSel l,[]),ty1) -> let ty = repr ty in (
-        (* TODO:評価順序に依存しないようにunifyする *)
-        match ty with
-          | TyMva({contents=NoLink _} as link) ->
-              link :=
-                OnUnfy(function
-                         | TyCon(TyCRcd ls,tys) when List.mem l ls ->
-                             let ty' = List.assoc l (List.combine ls tys) in
-                               unify lrefs ty1 ty';
-                         | _ -> raise (Label_fail(l,!lrefs))
-                      )
-          | TyCon(TyCRcd ls,tys) when List.mem l ls ->
-              let ty' = List.assoc l (List.combine ls tys) in
-                unify lrefs ty1 ty';
-                Some(TmCon(Const.CnSel l,[]))
-          | _ -> raise (Label_fail(l,!lrefs))
-      )
-    | TmTpp(TmCon(Const.CnNth i,[]),ty1) -> let ty = repr ty in (
-        match ty with
-          | TyMva{contents=NoLink _} ->
-              None
-          | TyCon(TyCTpl n,tys) when i <= n ->
-              let ty' = List.nth tys (i-1) in
-                unify lrefs ty1 ty';
-                Some(TmCon(Const.CnNth i,[]))
-          | _ -> raise (Tuple_fail(i,!lrefs))
-      )
-    | TmTpp(tm1,ty2) -> (
-        match type_apply lrefs ctx tm1 ty2 with
-          | None -> None
-          | Some tm' -> type_apply lrefs ctx tm' ty
-      )
-    | TmCon _ -> let ty = repr ty in (
-        match ty with
-          | TyMva{contents=NoLink _} -> None
-          | ty -> Some tm
-      )
+          changed := true;
+          TmTpp((term_shift (x + o) tm'),ty2)
+    | TmTpp(TmTpp(TmCon(Const.CnSel l,[]),ty1),ty2) as tm ->
+        let ty2 = repr ty2 in
+          ( match ty2 with
+              | TyCon(TyCRcd ls,tys) when List.mem l ls ->
+                  let ty' = List.assoc l (List.combine ls tys) in
+                    unify lrefs ty1 ty';
+                    changed := true;
+                    TmCon(Const.CnSel l,[])
+              | TyMva{contents=NoLink _} -> tm
+              | _ -> raise (Label_fail(l,!lrefs)) )
+    | TmTpp(TmTpp(TmCon(Const.CnNth i,[]),ty1),ty2) as tm ->
+        let ty2 = repr ty2 in
+          ( match ty2 with
+              | TyCon(TyCTpl n,tys) when i <= n ->
+                  let ty' = List.nth tys (i-1) in
+                    unify lrefs ty1 ty';
+                    changed := true;
+                    TmCon(Const.CnNth i,[])
+              | TyMva{contents=NoLink _} -> tm
+              | _ -> raise (Tuple_fail(i,!lrefs)) )
+    | TmTpp(tm1,ty2) ->
+        TmTpp(walk ctx tm1,ty2)
     | _ -> assert false
+  in
+  let rec loop tm =
+    Printf.printf "...> %s\n" (Absyn.to_string ctx tm);
+    if !changed then ( changed := false; loop (walk ctx tm) ) else tm
+  in
+    loop tm
 
 let typing ctx tm b =
   let lrefs = ref [] in
   let rank = 0 in
   let tm,ty = typeof lrefs ctx tm in
-    print_string (Absyn.to_string ctx tm);
+    print_string (Absyn.to_string ctx tm); print_newline();
   let tm = type_eval lrefs ctx tm in
+    print_string (Absyn.to_string ctx tm); print_newline();
     generalize ctx rank tm b ty
 
 let restore lrefs =
