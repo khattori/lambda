@@ -49,6 +49,9 @@ let report pos e = (
     | Core.Case_fail lrefs ->
         Printf.fprintf stderr "Case unmatch\n";
         Core.restore lrefs
+    | Core.Over_fail lrefs ->
+        Printf.fprintf stderr "Overload mismatch\n";
+        Core.restore lrefs
     | Failure s ->
         fprintf stderr "Runtime error: %s\n" s
     | exn -> raise exn );

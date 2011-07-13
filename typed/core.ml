@@ -10,6 +10,7 @@ exception Occur_check of link ref list
 exception Label_fail  of string * link ref list
 exception Tuple_fail  of int * link ref list
 exception Case_fail   of link ref list
+exception Over_fail   of link ref list
 
 (*
  * case_reduc: case簡約
@@ -134,6 +135,7 @@ let generalize ctx rank tm b ty =
             )
       | TyMva{contents=LinkTo{typ=ty}} -> walk ty
       | TyCon(tc,tys) -> List.iter walk tys
+      | TyAll _ -> assert false
       | ty -> ()
     in
       walk ty;
@@ -279,6 +281,21 @@ let typeof lrefs ctx tm =
           ) cs
         in
           TmCas(tm1',cs'),ty2
+
+    (*
+            Γ |- Ei : Ti     ∃θ.θTi = θT
+     -------------------------------------------------
+      Γ |- over T of E1 | ... | En : T
+    *)
+    | TmOvr(ty,os) ->
+        let os' = List.map (
+          fun (_,tm) ->
+            let tm',ty' = walk ctx rank tm in
+            let ty = Type.copy ty in
+              unify lrefs ty ty';
+              Some ty',tm'
+        ) os in
+          TmOvr(ty,os'),ty
     | _ -> assert false
 
   in
@@ -296,7 +313,8 @@ let type_eval lrefs ctx tm =
   let changed = ref true in
   let rec walk ctx = function
     | (TmVar _ | TmMem _ | TmCon _) as tm -> tm
-    | TmTbs(t,tm) -> TmTbs(t,walk ctx tm)
+    | TmTbs _ -> tm
+(*    | TmTbs(t,tm) -> TmTbs(t,walk ctx tm) *)
     | TmAbs((b,topt),tm1) ->
         let ctx' = Context.add_bind ctx b in
           TmAbs((b,topt),walk ctx' tm1)
@@ -343,6 +361,21 @@ let type_eval lrefs ctx tm =
               | _ -> raise (Tuple_fail(i,!lrefs)) )
     | TmTpp(tm1,ty2) ->
         TmTpp(walk ctx tm1,ty2)
+    | TmOvr(ty1,os) ->
+        let os' = List.filter (
+          fun (topt,tm) -> match topt with
+            | None -> assert false
+            | Some ty ->
+                let ty1' = Type.copy ty1 in
+                let ty' = Type.copy ty in
+                  try
+                    unify lrefs ty' ty1'; true
+                  with Unify_fail _ -> changed := true; false
+        ) os in (
+          match os' with
+            | [] -> raise (Over_fail !lrefs)
+            | [_,tm] -> changed := true; tm
+            | _ -> TmOvr(ty1,os') )
     | _ -> assert false
   in
   let rec loop tm =

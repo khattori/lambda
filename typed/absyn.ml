@@ -140,8 +140,9 @@ and to_string_const (Const(cn,cs)) =
           (Const.to_string cn)
           (String.concat " " (List.map to_string_const cs))
 and to_string_over ctx (topt,tm) =
-  sprintf "%s%s" (to_string ctx tm) (topt_to_string ctx topt)
-
+  match topt with
+    | None    -> sprintf "%s" (to_string ctx tm)
+    | Some ty -> sprintf "%s => %s" (Type.to_string ctx ty) (to_string ctx tm)
 
 (* De Bruijin index *)
 (*
@@ -285,6 +286,7 @@ let is_value tm =
  *)
 let rec is_syntactic_value = function
   | TmVar _ | TmCon _ | TmAbs _ | TmMem _ | TmTbs _ -> true
+  | TmOvr _ -> true
   | TmTpp(tm,_) -> is_syntactic_value tm
   | tm -> is_ctor_term tm
 and is_ctor_term = function

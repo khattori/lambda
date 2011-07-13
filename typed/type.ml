@@ -52,6 +52,24 @@ let rec repr = function
       let ty = repr ty in link := link_to ty id rank; ty
   | ty -> ty
 
+(* 型複製 *)
+let copy ty =
+  let mvs_ref = ref [] in
+  let rec walk = function
+    | TyMva{contents=NoLink(mvid,r)} ->
+        if List.mem_assoc mvid !mvs_ref then
+          List.assoc mvid !mvs_ref
+        else
+          let mv = fresh_mvar r in
+            mvs_ref := (mvid,mv)::!mvs_ref;
+            mv
+    | TyMva{contents=LinkTo{typ=ty}} -> walk ty
+    | TyCon(tc,tys) -> TyCon(tc,List.map walk tys)
+    | TyAll(t,ty) -> TyAll(t,walk ty)
+    | ty -> ty
+  in
+    walk ty
+
 let rec result_type ty =
   let ty = repr ty in match ty with
     | TyCon(TyCArr,[ty1;ty2]) -> result_type ty2

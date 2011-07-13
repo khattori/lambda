@@ -1,3 +1,12 @@
+(over t->t->t of (+) | (+.)) 3 : Int -> Int
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+let print =
+  fix \print.\x.(over t -> unit of
+                 | print_string
+                 | print_int
+                 | ) x
+
 Œ^ƒGƒ‰[‚É‚È‚é‚Í‚¸
 > #l {l = #l} (#l {l = 0})
 #l <X1->X2> <{l:X1->X2}> {l = #l <X2> <X1>} (#l <X1> <{l:Int}>) {l = 0}

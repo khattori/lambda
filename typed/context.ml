@@ -100,11 +100,12 @@ let add_termbind ctx b tm ty o =
     | Wild             -> add_term ctx "_" tm ty o
     | Eager x | Lazy x -> add_term ctx x tm ty o
 
+let add_type ctx x ty =
+  (x,TypeBind ty)::ctx
 let add_typebind ctx b ty =
   match b with
-    | Wild             -> ("_",TypeBind ty)::ctx
-    | Eager x | Lazy x -> (x,  TypeBind ty)::ctx
-
+    | Wild             -> add_type ctx "_" ty
+    | Eager x | Lazy x -> add_type ctx x ty
 let add_typebinds ctx bs ts =
   List.fold_left2 add_typebind ctx bs ts
 
