@@ -374,7 +374,8 @@ let type_eval lrefs ctx tm =
         ) os in (
           match os' with
             | [] -> raise (Over_fail !lrefs)
-            | [_,tm] -> changed := true; tm
+            | [Some ty,tm] -> changed := true; unify lrefs ty ty1; tm
+            | [None,tm] -> assert false
             | _ -> TmOvr(ty1,os') )
     | _ -> assert false
   in
