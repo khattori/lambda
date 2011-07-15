@@ -42,6 +42,7 @@ type term =
   | TmAbs of (binder * Type.t option) * term
   | TmApp of term * term
   | TmLet of (binder * Type.t option) * term * term
+  | TmFix of term
   | TmCas of term * case list
   | TmAsc of term * Type.t
   | TmTbs of string * term
@@ -91,6 +92,8 @@ let rec to_string ctx = function
       let ctx',s = to_string_bind ctx b in
         sprintf "(let %s%s = %s in %s)"
           s (topt_to_string ctx topt) (to_string ctx tm1) (to_string ctx' tm2)
+  | TmFix tm ->
+      sprintf "fix %s" (to_string ctx tm)
   | TmCas(tm1,cs) ->
       sprintf "(case %s of %s)"
         (to_string ctx tm1)
@@ -168,6 +171,7 @@ let term_map onvar ontyp c tm =
     | TmApp(tm1,tm2)    -> TmApp(walk c tm1,walk c tm2)
     | TmLet(bt,tm1,tm2) ->
         TmLet(bt_map c bt,walk c tm1,walk (c + 1) tm2)
+    | TmFix tm          -> TmFix(walk c tm)
     | TmCas(tm,cs)      -> TmCas(walk c tm, cs_map c cs)
     | TmAsc(tm,ty)      -> TmAsc(walk c tm,ontyp c ty)
     | TmOvr(ty,os)      -> TmOvr(ontyp c ty,os_map c os)
@@ -286,7 +290,7 @@ let is_value tm =
  *)
 let rec is_syntactic_value = function
   | TmVar _ | TmCon _ | TmAbs _ | TmMem _ | TmTbs _ -> true
-  | TmOvr _ -> true
+  | TmOvr _ | TmFix _ -> true
   | TmTpp(tm,_) -> is_syntactic_value tm
   | tm -> is_ctor_term tm
 and is_ctor_term = function

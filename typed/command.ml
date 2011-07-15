@@ -99,5 +99,6 @@ let exec store ctx cmd =
                   ) ctors;
         print_data tycnam targs ctors;
         ctx
-    | Use name -> ctx
+    | Use name -> use_module name
     | Noop -> ctx
+

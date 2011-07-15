@@ -11,6 +11,7 @@
 
 %token LET
 %token IN
+%token FIX
 %token CASE
 %token OF
 %token OVER
@@ -43,6 +44,7 @@
 %left     VBAR
 %nonassoc below_COMMA
 %left     COMMA
+%right    FIX
 %right    RARROW
 %nonassoc DOT
 
@@ -158,6 +160,9 @@ expression
       fun ctx rank ->
         let ctx' = Context.add_bind ctx $2 in
           TmAbs(($2,None),$4 ctx' rank)
+    }
+  | FIX expression {
+      fun ctx rank -> TmFix($2 ctx rank)
     }
   | CASE expression OF case_list {
       fun ctx rank -> TmCas($2 ctx rank, $4 ctx rank)

@@ -1,13 +1,15 @@
-#
-# sample program
-# use util.prog
-#
+//
+// sample program
+// use util.prog
+//
 use util;
-def fact  = fix (\\fact.\n.if (== n 0) 1 ( imul_ n (fact (isub_ n 1))));
+def incr = \x.add x one;
+def decr = \x.sub x one;
+def fact  = fix (\fact.\n.if (<= n zero) one (mul n (fact (decr n))));
+def power = fix (\power.\x.\n.if (== n 0) one (mul x (power x (decr n))));
 
-def even,odd =
-  let evenodd =
-    fix (\\eo.cons (\n.if (== n 0) true  (tl eo (isub_ n 1)))
-                   (\n.if (== n 0) false (hd eo (isub_ n 1))))
-  in 
-    hd evenodd,tl evenodd;
+def eo = fix (\\eo.((\n.if (== n 0) true  (#2 eo (isub_ n 1))),
+                    (\n.if (== n 0) false (#1 eo (isub_ n 1)))));
+
+def even = #1 eo;
+def odd  = #2 eo;

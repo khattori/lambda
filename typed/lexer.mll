@@ -16,6 +16,7 @@
     ( "use",   USE   );
     ( "let",   LET   );
     ( "in",    IN    );
+    ( "fix",   FIX   );
     ( "case",  CASE  );
     ( "over",  OVER  );
     ( "of",    OF    );

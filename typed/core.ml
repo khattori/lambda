@@ -93,6 +93,8 @@ let rec eval_step ctx store = function
         TmApp(tm1,eval_step ctx store tm2)
       else
         TmApp(eval_step ctx store tm1,tm2)
+  | TmFix(TmAbs(b,tm)) as f->
+      term_subst_top f tm
   | TmVar x ->
       let tm',o = Context.get_term ctx x in
         term_shift (x + o) tm'
@@ -114,7 +116,7 @@ let rec eval_step ctx store = function
 (** 項が値になるまで評価を行う *)
 let eval ctx store tm =
   let rec iter tm =
-    Printf.printf "---> %s\n" (Absyn.to_string ctx tm);
+(*    Printf.printf "---> %s\n" (Absyn.to_string ctx tm); *)
     if is_value tm then
       tm
     else
@@ -251,6 +253,16 @@ let typeof lrefs ctx tm =
         let tm2',ty2 = walk ctx' rank tm2 in
           TmLet((b,Some ty1'),tm1',tm2'),ty2
     (*
+        Γ |- E : T->T
+      --------------------
+       Γ |- fix E : T
+    *)
+    | TmFix tm ->
+        let tm',ty' = walk ctx rank tm in
+        let ty = fresh_mvar rank in
+          unify lrefs ty' (tarrow ty ty);
+          TmFix tm',ty
+    (*
       Γ |- E : T
       Γ |- Ci : Ti1 -> ... Tim -> T  mはCiのアリティ
       Γ |- Ei : Ti1 -> ... Tim -> T' mはCiのアリティ
@@ -332,6 +344,8 @@ let type_eval lrefs ctx tm =
         let tm1' = walk ctx tm1 in
         let ctx' = Context.add_termbind ctx b tm1' ty 1 in
           TmLet((b,Some ty),tm1',walk ctx' tm2)
+    | TmFix tm ->
+        TmFix(walk ctx tm)
     | TmTpp(TmTbs(t,tm1),ty2) ->
         changed := true;
         tytm_subst_top ty2 tm1
@@ -389,7 +403,6 @@ let typing ctx tm b =
   let lrefs = ref [] in
   let rank = 0 in
   let tm,ty = typeof lrefs ctx tm in
-    print_string (Absyn.to_string ctx tm); print_newline();
   let tm = type_eval lrefs ctx tm in
     print_string (Absyn.to_string ctx tm); print_newline();
     generalize ctx rank tm b ty

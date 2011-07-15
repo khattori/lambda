@@ -1,23 +1,42 @@
 def if    = \b.\\t1.\\t2.case b of true -> t1
-                                 | false -> t2
-                                 | ... -> (\x.error "if: type mismatch");
+                                 | false -> t2;
 
 def hd    = \ls.case ls of cons -> \x.\_.x;
 def tl    = \ls.case ls of cons -> \_.\y.y;
 
-def ==    = \t1.\t2.beq t1 t2 true false;
+def ==    = \t1.\t2.beq_ t1 t2 true false;
+def !=    = \t1.\t2.beq_ t1 t2 false true;
 def not   = \t.== t false;
 def andalso = \t1.\\t2.if t1 t2 false;
 def orelse  = \t1.\\t2.if t1 true t2;
-def !=    = \t1.\t2.beq t1 t2 false true;
-def >     = \t1.\t2.igt_ t1 t2 true false;
+
+
+def add = over t->t->t of iadd_ | radd_ | scat_;
+def sub = over t->t->t of isub_ | rsub_;
+def mul = over t->t->t of imul_ | rmul_;
+def div = over t->t->t of idiv_ | rdiv_;
+def zero = over t of 0 | 0.0 | "";
+def one  = over t of 1 | 1.0;
+def gt   = over t->t->s->s->s of igt_ | rgt_;
+
+def >     = \t1.\t2.gt t1 t2 true false;
 def >=    = \t1.\t2.orelse (> t1 t2) (== t1 t2);
-def <     = \t1.\t2.igt_ t2 t1 true false;
+def <     = \t1.\t2.gt t2 t1 true false;
 def <=    = \t1.\t2.orelse (< t1 t2) (== t1 t2);
+
 def min   = \t1.\t2.if (<= t1 t2) t1 t2;
 def max   = \t1.\t2.if (>= t1 t2) t1 t2;
-def fix   = \f.(\x.f (x x)) (\x.f (x x));
 
-def maxv = fix (\\maxv.\x.\y.if (== y nil) x (if (> x y) (maxv x) (maxv y)));
-def minv = fix (\\minv.\x.\y.if (== y nil) x (if (> x y) (minv y) (minv x)));
+def to_str =
+    over t -> String of
+      \x.x
+    | rtos_
+    | itos_
+    | \x.if x "true" "false"
+    | \x.(case x of unit -> "()");;
+
+def to_strs = fix (
+        \to_strs.\xs.(
+          case xs of nil  -> ""
+                   | cons -> \x.\xs.scat_ (to_str x) (to_strs xs)));
 

@@ -98,12 +98,6 @@ let beq_ store = function
   | [x; y; v1; v2] -> v2
   | _ -> assert false
 
-(*
- * fix (\x.v) => v[x:=(fix (\x.v))]
- *)
-let fix_ store = function
-  | [v] -> term_subst_top (TmApp(TmCon(CnSym "fix",[]),v)) v
-  | _ -> assert false
 (* 
  * exit => 終了
  *)
@@ -172,8 +166,6 @@ let _dtor_table = [
                               TyAll("t1",
                                     tarrows[TyVar 0;TyVar 0;
                                             TyVar 1;TyVar 1;TyVar 1])))   );
-  ( "fix",   (1, fix_,  TyAll("t",
-                              tarrow (tarrow (TyVar 0) (TyVar 0)) (TyVar 0))) );
   ( "exit",  (0, exit_, tvoid)  );
   ( "error", (1, error_, tarrow tstring tvoid) );
 ]
