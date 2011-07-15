@@ -324,8 +324,12 @@ let typeof lrefs ctx tm =
 let type_eval lrefs ctx tm =
   let changed = ref true in
   let rec walk ctx = function
+    | TmVar x when Context.can_get_term ctx x ->
+        let tm',o = Context.get_term ctx x in
+          changed := true;
+          term_shift (x + o) tm'
     | (TmVar _ | TmMem _ | TmCon _) as tm -> tm
-    | TmTbs _ -> tm
+    | TmTbs _ as tm -> tm
 (*    | TmTbs(t,tm) -> TmTbs(t,walk ctx tm) *)
     | TmAbs((b,topt),tm1) ->
         let ctx' = Context.add_bind ctx b in
@@ -349,10 +353,12 @@ let type_eval lrefs ctx tm =
     | TmTpp(TmTbs(t,tm1),ty2) ->
         changed := true;
         tytm_subst_top ty2 tm1
+(*
     | TmTpp(TmVar x,ty2) ->
         let tm',o = Context.get_term ctx x in
           changed := true;
           TmTpp((term_shift (x + o) tm'),ty2)
+*)
     | TmTpp(TmTpp(TmCon(Const.CnSel l,[]),ty1),ty2) as tm ->
         let ty2 = repr ty2 in
           ( match ty2 with

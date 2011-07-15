@@ -1,3 +1,78 @@
+[core-ML]
+型τ
+  τ ::= t | β | τ -> τ
+型スキーマσ
+  σ ::= τ|∀t.σ
+
+項M,N
+M,N ::=
+      | x
+      | M N
+      | \x.M
+      | let x = M in E
+      | fix \x.M
+
+
+
+[core-XML]
+型τ
+  τ ::= t | β | τ -> τ
+型スキーマσ
+  σ ::= τ|Πt.σ
+
+M,N ::=
+      | x
+      | M N
+      | \x:τ.M
+      | M<τ>
+      | \<t>.M
+      | let x:σ = M in N
+
+(\<t>.M) <τ> → M[t:=τ]
+let x:Πt.σ = M in N → N[x:=M]
+
+C ::= [] | M C | C N
+    | \x:τ.C
+    | C<τ>
+    | let x:σ = C in N
+    
+[core-XML+record]
+τ ::=
+      | { l1:τ1;...;ln:τn }
+M,N ::=
+      | { l1=M1;...;ln=Mn }
+      | #l
+
+
+型推論
+
+Γ |- #l ⇒ #l <X1> <X2> : X2->X1 where X1,X2 is fresh type variable
+
+    Γ |- Mi ⇒ Mi' : τi    τi ≦ τ
+-----------------------------------------------
+Γ |- over τ of M1 |...| Mn ⇒
+       over τ of τ1=>M1' |...| τn=>Mn' : τ
+
+
+[型レベル評価]
+
+C[M]→θC[M']
+
+M→M',θ
+
+(\<t>.M) <τ> → M[t:=τ],id
+let x:Πt.σ = M in N → N[x:=M],id
+
+#l <τ1> <{...;l:τ;...}> → #l,θ where θ=unify(τ,τ1)
+
+over τ of τ'=>M → M,θ where θ=unify(τ,τ')
+over τ of τ1=>M1|...|τn=>Mn 
+→ over τ of τj=>Mj|...|τk=>Mk,id    1≦j≦i≦k≦n,unify(τ,τi),それ以外はfail
+
+
+
+
+
 (over t->t->t of (+) | (+.)) 3 : Int -> Int
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
