@@ -153,12 +153,12 @@ expression
     }
   | LET binder EQ expression IN expression {
       fun ctx rank ->
-        let ctx' = Context.add_bind ctx $2 in
+        let ctx' = Context.add_namebind ctx $2 in
           TmLet(($2,None),$4 ctx (rank + 1),$6 ctx' rank)
     }
   | BACKSLASH binder DOT expression {
       fun ctx rank ->
-        let ctx' = Context.add_bind ctx $2 in
+        let ctx' = Context.add_namebind ctx $2 in
           TmAbs(($2,None),$4 ctx' rank)
     }
   | FIX expression {

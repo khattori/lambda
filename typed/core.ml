@@ -96,7 +96,7 @@ let rec eval_step ctx store = function
   | TmFix(TmAbs(b,tm)) as f->
       term_subst_top f tm
   | TmVar x ->
-      let tm',o = Context.get_term ctx x in
+      let tm',o = Context.get_glbl ctx x in
         term_shift (x + o) tm'
   | TmCas(TmCon(c,vs),cs) ->
       case_reduc c vs cs
@@ -332,7 +332,7 @@ let type_eval lrefs ctx tm =
     | TmTbs _ as tm -> tm
 (*    | TmTbs(t,tm) -> TmTbs(t,walk ctx tm) *)
     | TmAbs((b,topt),tm1) ->
-        let ctx' = Context.add_bind ctx b in
+        let ctx' = Context.add_namebind ctx b in
           TmAbs((b,topt),walk ctx' tm1)
     | TmApp(tm1,tm2) ->
         TmApp(walk ctx tm1,walk ctx tm2)
@@ -346,7 +346,7 @@ let type_eval lrefs ctx tm =
                 ) cs)
     | TmLet((b,Some ty),tm1,tm2) ->
         let tm1' = walk ctx tm1 in
-        let ctx' = Context.add_termbind ctx b tm1' ty 1 in
+        let ctx' = Context.add_termbind ctx b tm1' 1 in
           TmLet((b,Some ty),tm1',walk ctx' tm2)
     | TmFix tm ->
         TmFix(walk ctx tm)

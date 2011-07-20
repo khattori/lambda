@@ -121,7 +121,7 @@ and to_string_binds ctx0 bs =
   let ctx',ss = List.fold_left foldf (ctx0,[]) bs in
     ctx',String.concat "," (List.rev ss)
 and to_string_bind ctx = function
-  | Wild as b -> (Context.add_bind ctx b),"_"
+  | Wild as b -> (Context.add_namebind ctx b),"_"
   | Eager x   -> Context.fresh_name ctx x
   | Lazy x    ->
       let ctx',x' = Context.fresh_name ctx x

@@ -45,9 +45,9 @@ let def_bind store ctx b tm =
           print_bind ctx b v ty; ctx
     | Eager x ->
         let v = Core.eval ctx store tm' in
-          print_bind ctx b v ty; (Context.add_term ctx x v ty 1)
+          print_bind ctx b v ty; (Context.add_glbl ctx x v tm' ty 1)
     | Lazy x ->
-        print_bind ctx b tm' ty; (Context.add_term ctx x tm' ty 1)
+        print_bind ctx b tm' ty; (Context.add_glbl ctx x tm' tm' ty 1)
 
 (* ロード関数のテーブル定義 *)
 type loader_t = {
