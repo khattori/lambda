@@ -4,10 +4,34 @@
                                       （株）システム計画研究所
                                  服部　健太<hattori@isp.co.jp>
 ****************************************************************
+
 【概要】
+
+Hindley-Milnerの多相型システムは，ML, OCaml, Haskellなど数多くの関数型
+プログラミング言語の型システムの理論的基礎として広く用いられている．し
+かし，現実的なプログラミング言語では，レコード型や演算子の多重定義など
+の機能を提供する必要があり，HM多相型システムに対して様々な拡張が提案さ
+れ実装されてきた．例えば，大堀の多相型レコード理論を実装したSML#，
+Wadlerの型クラス機構によって多重定義を可能にしたHaskellなどがある．こ
+れらは，ある種の制約を表現できるような型変数を導入した上で，その制約を
+解くために単一化アルゴリズムを拡張するというような手法ととらえることが
+できる．本稿では，このような手法とは異なり，型レベル評価というシンプル
+な機構を用いる手法を提案する．提案手法では，HM型システムに対する様々な
+拡張を統一的，かつ簡単に提供することが可能となる．
 
 
 1.【はじめに】==================================================
+
+本提案手法では，型推論は以下のように2つのフェーズから構成される．
+
+1) Milnerの型推論アルゴリズムWにもとづく型推論を行いながら，もともとの
+   λ式に型注釈をつけていく．また，多相型を持つ式については型抽象に，
+   多相型変数の具現化は型適用に変換を行う．なお，この段階での型推論は
+   不完全であってもよい．
+
+2) 型注釈付きのλ式の型適用について，評価を行う．このとき，必要に応じ
+   て単一化を行うことで，残りの部分の型の推論や型エラーの検出を行う．
+
 
 2.【Core-MLとCore-XML】=========================================
 
@@ -103,4 +127,31 @@ let id:Πt.t->t = \<t>.\x:t.x in id <X->X> (id <X>)
 
 M ---> wrong
 
+
+
 【参考文献】
+
+[1] L.Damas & R.Milner, "Principal type schemes for functional
+programs", POPL 1982.
+
+[2] R.Milner, "A theory of type polymorphism in programming",
+J.Comp.Sys.Sci,Vol.17(3),1978.
+
+[3] S.Kaes, "Type inference in the presence of overloading, subtyping
+and recursive types", ACM LISP&F.P.,1992.
+
+[4] S.R.Thatte, "Semantics of type classes revisited", LISP94, 1994.
+
+[5] J.C.Mitchell & R. Harper, "The essence of ML", POPL93, 1993.
+
+[6] M.Odersky,P.Wadler,M.Wehr, "A second look at overloading", FPCA95,
+1995.
+
+[7] P.Wadler&S.Blott, "How to make ad-hoc polymorphism less ad-hoc",
+POPL89, 1989.
+
+[8] A.Ohori, "A polymorphic record calculus and its compilation", ACM
+Trans.prog.lang.sys., Vol.17(6), 1995.
+
+[9] D.Remy, "Type inference for records in a natural extension of ML",
+Theor.Asp.OOP, 97-96, MIT Press, 1994.

@@ -12,9 +12,8 @@ M,N ::=
       | let x = M in E
       | fix \x.M
 
-
-
 [core-XML]
+
 型τ
   τ ::= t | β | τ -> τ
 型スキーマσ
