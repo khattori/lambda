@@ -1,3 +1,7 @@
+"Syntactic approach to type soundness"
+
+Subject reduction‚ğg‚Á‚ÄØ–¾‚·‚é
+
 TODO
 
 let x = [] : 'a list in
@@ -6,8 +10,7 @@ let x = [] : 'a list in
 (fun f x -> let g = f in g [0]) (fun x -> true :: x)
                                 ^^^^^^^^^^^^^^^^^^^^ list bool -> list bool
 
-
-
+def f = \x.let r = ref x in !r;
 
 let f = ref (\x.x)
 let f = \<t>.ref <X> <t->t> (\x:t.x)
