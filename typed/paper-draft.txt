@@ -90,7 +90,6 @@ let id = \x.x in id id
 =>
 let id:Πt.t->t = \<t>.\x:t.x in id <X->X> (id <X>)
 
-
     ※ 変換例は R.Harper, J.C.Mithcell, "On the Type Structure of
     Standard ML", 1993.にもとづく（少し改変）
 
@@ -127,6 +126,10 @@ let id:Πt.t->t = \<t>.\x:t.x in id <X->X> (id <X>)
 
 M ---> wrong
 
+型レベルで評価したものは、そのまま実行しない
+M⇒E; E→F,θ
+
+θEを実行する(副作用が問題になる場合)
 
 
 【参考文献】

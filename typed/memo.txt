@@ -1,3 +1,24 @@
+TODO
+
+let x = [] : 'a list in
+  let f = 
+
+(fun f x -> let g = f in g [0]) (fun x -> true :: x)
+                                ^^^^^^^^^^^^^^^^^^^^ list bool -> list bool
+
+
+
+
+let f = ref (\x.x)
+let f = \<t>.ref <X> <t->t> (\x:t.x)
+let f = \<t>.m0 <X> <t->t> : <t>=>Ref <t->t>
+
+‘åˆæ•Ï”‚Æ‹ÇŠ•Ï”
+let
+
+let f = ref 0 in
+    
+
 [core-ML]
 Œ^ƒÑ
   ƒÑ ::= t | ƒÀ | ƒÑ -> ƒÑ

@@ -66,8 +66,8 @@ let case_reduc cn vs cs =
  * 
  *)
 let rec eval_step ctx store = function
-  | tm when is_value tm ->
-      Prims.tm_error "*** no eval rule ***"
+  | tm when is_value tm -> assert false
+      (* Prims.tm_error "*** no eval rule ***" *)
   | TmCon(Const.CnNth i,[TmCon(Const.CnTpl _,vs)]) ->
       List.nth vs (i-1)
   | TmCon(Const.CnSel l,[TmCon(Const.CnRcd ls,vs)]) ->
@@ -83,11 +83,11 @@ let rec eval_step ctx store = function
         TmApp(TmAbs((b,topt),tm1),eval_step ctx store tm2)
   | TmApp(TmAbs((Lazy _,_),tm1),tm2) ->
       term_subst_top tm2 tm1
-  | TmApp(TmCon(c,vs),tm1) when is_value tm1 ->
+  | TmApp(TmCon(c,vs) as tm1,tm2) when is_value tm2 ->
       if Const.arity c > List.length vs then
-        TmCon(c,vs@[tm1])
+        TmCon(c,vs@[tm2])
       else
-        Prims.tm_error "*** no eval rule ***"
+        TmApp(eval_step ctx store tm1,tm2)
   | TmApp(tm1,tm2) ->
       if is_value tm1 then
         TmApp(tm1,eval_step ctx store tm2)
@@ -104,19 +104,19 @@ let rec eval_step ctx store = function
       TmCas(eval_step ctx store tm1,cs)
   | TmTpp(TmCon(c,vs),ty2) ->
       TmCon(c,vs)
-  | TmTpp(tm1,ty2) ->
-      TmTpp(eval_step ctx store tm1,ty2)
-(*
-  type_evalによって評価済み
   | TmTpp(TmTbs(x,tm1),ty2) ->
       tytm_subst_top ty2 tm1
-*)
+  | TmTpp(tm1,ty2) ->
+      TmTpp(eval_step ctx store tm1,ty2)
+  | TmTbs(t,tm1) ->
+      let ctx' = Context.add_name ctx t in
+        TmTbs(t,eval_step ctx' store tm1)
   | _ -> Prims.tm_error "*** no eval rule ***"
 
 (** 項が値になるまで評価を行う *)
 let eval ctx store tm =
   let rec iter tm =
-(*    Printf.printf "---> %s\n" (Absyn.to_string ctx tm); *)
+    Printf.printf "---> %s\n" (Absyn.to_string ctx tm);
     if is_value tm then
       tm
     else
@@ -147,6 +147,7 @@ let generalize ctx rank tm b ty =
         List.fold_left
           (fun ty (mvid,t) -> typ_gen t mvid ty) ty !ts_ref
       )
+(*
   in
   let monoralize_ ty =
     let rec walk ty = match ty with
@@ -157,11 +158,9 @@ let generalize ctx rank tm b ty =
       | _ -> assert false
     in
       walk ty
+*)
   in
-    if is_lazy b || is_syntactic_value tm then
-      generalize_ rank tm ty
-    else
-      (monoralize_ ty; tm,ty)
+    generalize_ rank tm ty
 
 let instanciate rank tm ty =
   let tm_ref = ref tm in
@@ -176,6 +175,16 @@ let instanciate rank tm ty =
     | _ -> assert false (* 自由なTyVarが出現した *)
   in
     !tm_ref,walk ty
+
+(* ty2の型変数のランクがrankより大きければrankにする *)
+let update_rank lrefs rank ty1 ty2 =
+  let rec walk = function
+    | ty when ty == ty1 -> raise (Occur_check !lrefs)
+    | TyMva{contents=LinkTo{typ=ty}} -> walk ty
+    | TyMva({contents=NoLink(id,r)} as l) when r > rank -> l := NoLink(id,rank)
+    | TyCon(_,tys) -> List.iter walk tys
+    | _ -> ()
+  in walk ty2
 
 let unify lrefs ty1 ty2 =
   let rec walk ty1 ty2 =
@@ -192,9 +201,11 @@ let unify lrefs ty1 ty2 =
                 lrefs := l2::!lrefs
               )
           | TyMva({contents=NoLink(id1,r1)} as l1), _ ->
+              update_rank lrefs r1 ty1 ty2;
               l1 := link_to ty2 id1 r1;
               lrefs := l1::!lrefs
           | _, TyMva({contents=NoLink(id2,r2)} as l2) ->
+              update_rank lrefs r2 ty2 ty1;
               l2 := link_to ty1 id2 r2;
               lrefs := l2::!lrefs
           | TyCon(tc1,tys1),TyCon(tc2,tys2) when tc1 = tc2 ->
@@ -203,7 +214,7 @@ let unify lrefs ty1 ty2 =
               raise (Unify_fail !lrefs)
   in
     walk ty1 ty2
-
+(*
 let occur_check lrefs ty =
   let visiting = mark() and visited = mark() in
   let rec walk ty =
@@ -218,101 +229,7 @@ let occur_check lrefs ty =
       | TyCon(_,tys) -> List.iter walk tys
       | _ -> ()
   in walk ty
-
-(** 型付けを行う *)
-let typeof lrefs ctx tm =
-  let rec walk_const rank (Const(cn,cs)) =
-    let ty1 = snd(instanciate rank (TmCon(cn,[])) (Type.of_const cn)) in
-    let ty2 = fresh_mvar rank in
-    let tys = List.map (walk_const rank) cs in
-      unify lrefs ty1 (tarrows (tys@[ty2]));
-      ty2
-  in
-  let rec walk ctx rank = function
-    | TmVar x as tm ->
-        instanciate rank tm (Context.get_typ ctx x)
-    | TmMem _ -> assert false (* プログラムテキスト中には出現しない *)
-    | TmCon(c,[]) as tm ->
-        instanciate rank tm (Type.of_const c)
-    | TmAbs((b,_),tm) ->
-        let ty1 = fresh_mvar rank in
-        let ctx' = Context.add_typebind ctx b ty1 in
-        let tm',ty2 = walk ctx' rank tm in
-          TmAbs((b,Some ty1),tm'),tarrow ty1 ty2
-    | TmApp(tm1,tm2) ->
-        let ty = fresh_mvar rank in
-        let tm1,ty1 = walk ctx rank tm1 in
-        let tm2,ty2 = walk ctx rank tm2 in
-          unify lrefs ty1 (tarrow ty2 ty);
-          occur_check lrefs ty1;
-          TmApp(tm1,tm2),ty
-    | TmLet((b,_),tm1,tm2) ->
-        let tm1',ty1 = walk ctx (rank + 1) tm1 in
-        let tm1',ty1' = generalize ctx (rank + 1) tm1' b ty1 in
-        let ctx' = Context.add_typebind ctx b ty1' in
-        let tm2',ty2 = walk ctx' rank tm2 in
-          TmLet((b,Some ty1'),tm1',tm2'),ty2
-    (*
-        Γ |- E : T->T
-      --------------------
-       Γ |- fix E : T
-    *)
-    | TmFix tm ->
-        let tm',ty' = walk ctx rank tm in
-        let ty = fresh_mvar rank in
-          unify lrefs ty' (tarrow ty ty);
-          TmFix tm',ty
-    (*
-      Γ |- E : T
-      Γ |- Ci : Ti1 -> ... Tim -> T  mはCiのアリティ
-      Γ |- Ei : Ti1 -> ... Tim -> T' mはCiのアリティ
-     -------------------------------------------------
-      Γ |- case E of C1 -> E1 | ... | Cn -> En : T'
-    *)
-    | TmCas(tm1,cs) ->
-        let tm1',ty1 = walk ctx rank tm1 in
-        let ty2 = fresh_mvar rank in
-        let cs' =
-          List.map (
-            function
-              | CsPat(c,tm) ->
-                  let ty_c = walk_const rank c in
-                  let tm',ty_e = walk ctx rank tm in
-                    unify lrefs ty1 (result_type ty_c);
-                    unify lrefs ty2 (result_type ty_e);
-                    ( try
-                        List.iter2
-                          (unify lrefs) (arg_types ty_c) (arg_types ty_e)
-                      with Invalid_argument _ ->
-                        raise (Case_fail !lrefs) );
-                    CsPat(c,tm')
-              | CsDef tm ->
-                  let tm',ty = walk ctx rank tm in
-                    unify lrefs ty (tarrow ty1 ty2);
-                    CsDef tm'
-          ) cs
-        in
-          TmCas(tm1',cs'),ty2
-
-    (*
-            Γ |- Ei : Ti     ∃θ.θTi = θT
-     -------------------------------------------------
-      Γ |- over T of E1 | ... | En : T
-    *)
-    | TmOvr(ty,os) ->
-        let os' = List.map (
-          fun (_,tm) ->
-            let tm',ty' = walk ctx rank tm in
-            let ty = Type.copy ty in
-              unify lrefs ty ty';
-              Some ty',tm'
-        ) os in
-          TmOvr(ty,os'),ty
-    | _ -> assert false
-
-  in
-    walk ctx 0 tm
-
+*)
 (*
   (\<t>.tm1) <ty2> → tm1[t:=ty2]
   (x <ty1> ... <tyn>)
@@ -405,13 +322,112 @@ let type_eval lrefs ctx tm =
   in
     loop tm
 
+(** 型付けを行う *)
+let typeof lrefs ctx tm =
+  let rec walk_const rank (Const(cn,cs)) =
+    let ty1 = snd(instanciate rank (TmCon(cn,[])) (Type.of_const cn)) in
+    let ty2 = fresh_mvar rank in
+    let tys = List.map (walk_const rank) cs in
+      unify lrefs ty1 (tarrows (tys@[ty2]));
+      ty2
+  in
+  let rec walk ctx rank = function
+    | TmVar x as tm ->
+        instanciate rank tm (Context.get_typ ctx x)
+    | TmMem _ -> assert false (* プログラムテキスト中には出現しない *)
+    | TmCon(Const.CnSym("ref") as c,_) as tm ->
+        instanciate (rank-1) tm (Type.of_const c)
+    | TmCon(c,[]) as tm ->
+        instanciate rank tm (Type.of_const c)
+    | TmAbs((b,_),tm) ->
+        let ty1 = fresh_mvar rank in
+        let ctx' = Context.add_typebind ctx b ty1 in
+        let tm',ty2 = walk ctx' rank tm in
+          TmAbs((b,Some ty1),tm'),tarrow ty1 ty2
+    | TmApp(tm1,tm2) ->
+        let ty = fresh_mvar rank in
+        let tm1,ty1 = walk ctx rank tm1 in
+        let tm2,ty2 = walk ctx rank tm2 in
+          unify lrefs ty1 (tarrow ty2 ty);
+(*          occur_check lrefs ty1; update_rank中でoccur checkする *)
+          TmApp(tm1,tm2),ty
+    | TmLet((b,_),tm1,tm2) ->
+        let tm1',ty1 = walk ctx (rank + 1) tm1 in
+        let _ = type_eval lrefs ctx tm1' in
+        let tm1',ty1' = generalize ctx (rank + 1) tm1' b ty1 in
+        let ctx' = Context.add_typebind ctx b ty1' in
+        let tm2',ty2 = walk ctx' rank tm2 in
+          TmLet((b,Some ty1'),tm1',tm2'),ty2
+    (*
+        Γ |- E : T->T
+      --------------------
+       Γ |- fix E : T
+    *)
+    | TmFix tm ->
+        let tm',ty' = walk ctx rank tm in
+        let ty = fresh_mvar rank in
+          unify lrefs ty' (tarrow ty ty);
+          TmFix tm',ty
+    (*
+      Γ |- E : T
+      Γ |- Ci : Ti1 -> ... Tim -> T  mはCiのアリティ
+      Γ |- Ei : Ti1 -> ... Tim -> T' mはCiのアリティ
+     -------------------------------------------------
+      Γ |- case E of C1 -> E1 | ... | Cn -> En : T'
+    *)
+    | TmCas(tm1,cs) ->
+        let tm1',ty1 = walk ctx rank tm1 in
+        let ty2 = fresh_mvar rank in
+        let cs' =
+          List.map (
+            function
+              | CsPat(c,tm) ->
+                  let ty_c = walk_const rank c in
+                  let tm',ty_e = walk ctx rank tm in
+                    unify lrefs ty1 (result_type ty_c);
+                    unify lrefs ty2 (result_type ty_e);
+                    ( try
+                        List.iter2
+                          (unify lrefs) (arg_types ty_c) (arg_types ty_e)
+                      with Invalid_argument _ ->
+                        raise (Case_fail !lrefs) );
+                    CsPat(c,tm')
+              | CsDef tm ->
+                  let tm',ty = walk ctx rank tm in
+                    unify lrefs ty (tarrow ty1 ty2);
+                    CsDef tm'
+          ) cs
+        in
+          TmCas(tm1',cs'),ty2
+
+    (*
+            Γ |- Ei : Ti     ∃θ.θTi = θT
+     -------------------------------------------------
+      Γ |- over T of E1 | ... | En : T
+    *)
+    | TmOvr(ty,os) ->
+        let os' = List.map (
+          fun (_,tm) ->
+            let tm',ty' = walk ctx rank tm in
+            let ty = Type.copy ty in
+              unify lrefs ty ty';
+              Some ty',tm'
+        ) os in
+          TmOvr(ty,os'),ty
+    | _ -> assert false
+
+  in
+    walk ctx 0 tm
+
+
 let typing ctx tm b =
   let lrefs = ref [] in
   let rank = 0 in
   let tm,ty = typeof lrefs ctx tm in
-  let tm = type_eval lrefs ctx tm in
+  let _ = type_eval lrefs ctx tm in
+  let tm,ty = generalize ctx rank tm b ty in
     print_string (Absyn.to_string ctx tm); print_newline();
-    generalize ctx rank tm b ty
+    tm,ty
 
 let restore lrefs =
   List.iter (

@@ -80,7 +80,7 @@ let rec to_string ctx = function
            (List.map2_unb
               (fun l v -> sprintf "%s = %s" l (to_string ctx v)) ls vs))
   | TmCon(cn,vs) ->
-      sprintf "(%s %s)"
+      sprintf "[%s %s]"
         (Const.to_string cn)
         (String.concat " " (List.map (to_string ctx) vs))
   | TmAbs((b,topt),tm) ->
@@ -280,7 +280,8 @@ let typ_gen s mvid ty =
 let is_value tm =
   let rec walk = function
     | TmCon(c,vs) -> Const.is_value c vs
-    | TmMem _ | TmAbs _ | TmTbs _ -> true
+    | TmMem _ | TmAbs _ -> true
+    | TmTbs(t,tm) -> walk tm
     | _ -> false
   in
     walk tm
