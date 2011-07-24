@@ -1,0 +1,22 @@
+ˆÈ‰º‚Ì®‚ªŒ^ƒGƒ‰[‚Æ‚È‚ç‚È‚¢
+
+(\f.let g = \_.if true f (\x.x) in g 0 true) (\x.iadd_ x 1)
+
+(\f.let g = \_.if true f (\x.x) in g 0 true, g true false)
+         ---> OK‚Æ‚È‚é‚Í‚¸
+
+f : ƒ¿0
+(\x.x): ƒÀ1->ƒÀ1
+
+
+(\f.let g = \x.if (f x) f (\x.x) in g 0 true) (\x.iadd_ x 1)
+
+(\f.let g = \_.if true f (\x.x) in g 0 true, g true false)
+
+
+(\f.let g = \_.if true f (\x.x) in g 0 true, g true 3)
+        ---> NG‚Æ‚È‚é‚Í‚¸
+
+‹t‚Ìê‡‚à“¯—l
+
+\f.let g = \h.let _ = \x.f x in if true f h in g (\x.iadd_ x 1), g (\x.scat_ x x)
