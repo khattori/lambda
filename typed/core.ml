@@ -336,7 +336,8 @@ let typeof lrefs ctx tm =
         instanciate rank tm (Context.get_typ ctx x)
     | TmMem _ -> assert false (* プログラムテキスト中には出現しない *)
     | TmCon(Const.CnSym("ref") as c,_) as tm ->
-        instanciate (rank-1) tm (Type.of_const c)
+        instanciate no_rank tm (Type.of_const c)
+(*        instanciate (rank-1) tm (Type.of_const c) *)
     | TmCon(c,[]) as tm ->
         instanciate rank tm (Type.of_const c)
     | TmAbs((b,_),tm) ->
