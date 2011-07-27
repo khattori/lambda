@@ -155,6 +155,7 @@ and to_string_over ctx (topt,tm) =
 let typ_map onvar onmva c ty =
   let rec walk c ty = match ty with
     | TyVar x       -> onvar c x
+    | TyEmp         -> ty
     | TyAll(t,ty')  -> TyAll(t,walk (c+1) ty')
     | TyCon(tc,tys) -> TyCon(tc,List.map (walk c) tys)
     | TyMva{contents=NoLink(id,rank)} -> onmva c ty id rank

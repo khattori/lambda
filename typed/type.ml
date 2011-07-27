@@ -23,6 +23,7 @@ type tyc =
 type t =
   | TyVar of int
   | TyMva of link ref
+  | TyEmp
   | TyCon of tyc * t list
   | TyAll of string * t
 and link =
@@ -51,6 +52,17 @@ let rec repr = function
   | TyMva({contents=LinkTo{typ=ty;old=(id,rank)}} as link) ->
       let ty = repr ty in link := link_to ty id rank; ty
   | ty -> ty
+
+(* 型式が型変数を含むかどうかの判定 *)
+let has_tyvar ty =
+  let rec walk = function
+    | TyVar _ -> true
+    | TyMva{contents=LinkTo{typ=ty}} -> walk ty
+    | TyCon(tc,tys) -> List.exists walk tys
+    | TyAll(t,ty) -> walk ty
+    | _ -> false
+  in
+    walk ty
 
 (* 型複製 *)
 let copy ty =
@@ -85,9 +97,10 @@ let arg_types ty =
 (** 型を文字列表現に変換 *)
 let rec to_string ctx = function
   | TyVar x -> sprintf "%s(%d)" (Context.index2name ctx x) x
+  | TyEmp -> sprintf "*"
   | TyMva({contents=LinkTo{typ=ty}}) -> to_string ctx ty
-  | TyMva({contents=NoLink(id,_)}) ->
-      sprintf "X%d" id
+  | TyMva({contents=NoLink(id,r)}) ->
+      sprintf "X%d(rank:%d)" id r
   | TyCon(TyCArr,[ty1;ty2]) ->
       sprintf "(%s -> %s)" (to_string ctx ty1) (to_string ctx ty2)
   | TyCon(TyCArr,_) -> assert false

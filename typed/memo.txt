@@ -1,3 +1,23 @@
+def if = \b.\\t1.\\t2.case b of true -> t1 | false -> t2;
+def hd = \ls.case ls of cons -> \x.\_.x;
+def is_nil = \ls.case ls of nil -> true | cons -> \_.\_.false;
+
+def f = let r = ref {} in \_.!r;
+def id = \x.let r = ref x in !r;
+
+def evil = \f.
+  let r = ref {} in \x.
+    let y = !r in let _ = := r {f x} in
+      if (is_nil y) (hd (!r)) (hd y);
+
+def evil_id = evil (\x.x);
+
+
+
+---> rがクロージャに閉じ込められる
+ 
+
+
 "Syntactic approach to type soundness"
 
 Subject reductionを使って証明する

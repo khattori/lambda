@@ -240,42 +240,54 @@ let occur_check lrefs ty =
 *)
 let type_eval lrefs ctx tm =
   let changed = ref true in
-  let rec walk ctx = function
+  let rec walk ctx level rank =
+    function
     | TmVar x when Context.can_get_term ctx x ->
         let tm',o = Context.get_term ctx x in
           changed := true;
           term_shift (x + o) tm'
     | (TmVar _ | TmMem _ | TmCon _) as tm -> tm
-    | TmTbs _ as tm -> tm
-(*    | TmTbs(t,tm) -> TmTbs(t,walk ctx tm) *)
+    | TmTbs(t,tm) ->
+        let ctx' = Context.add_name ctx t in
+          TmTbs(t,walk ctx' level rank tm)
     | TmAbs((b,topt),tm1) ->
         let ctx' = Context.add_namebind ctx b in
-          TmAbs((b,topt),walk ctx' tm1)
+          TmAbs((b,topt),walk ctx' (level - 1) rank tm1)
     | TmApp(tm1,tm2) ->
-        TmApp(walk ctx tm1,walk ctx tm2)
+        TmApp(walk ctx (if level >= 0 then level + 1 else level) rank tm1,
+              walk ctx level rank tm2)
     | TmCas(tm1,cs) ->
-        let tm1' = walk ctx tm1 in
+        let tm1' = walk ctx level rank tm1 in
           TmCas(tm1',
                 List.map (
                   function
-                    | CsPat(cn,tm) -> CsPat(cn,walk ctx tm)
-                    | CsDef tm     -> CsDef(walk ctx tm)
+                    | CsPat(cn,tm) -> CsPat(cn,walk ctx level rank tm)
+                    | CsDef tm     -> CsDef(walk ctx level rank tm)
                 ) cs)
     | TmLet((b,Some ty),tm1,tm2) ->
-        let tm1' = walk ctx tm1 in
+        let tm1' = walk ctx level (rank + 1) tm1 in
         let ctx' = Context.add_termbind ctx b tm1' 1 in
-          TmLet((b,Some ty),tm1',walk ctx' tm2)
+          if !changed then
+            TmLet((b,Some ty),tm1',tm2)
+          else
+            TmLet((b,Some ty),tm1',walk ctx' level rank tm2)
     | TmFix tm ->
-        TmFix(walk ctx tm)
+        TmFix(walk ctx level rank tm) (* ??? *)
     | TmTpp(TmTbs(t,tm1),ty2) ->
         changed := true;
         tytm_subst_top ty2 tm1
-(*
-    | TmTpp(TmVar x,ty2) ->
-        let tm',o = Context.get_term ctx x in
+    | TmTpp(TmTpp(TmCon(Const.CnSym "ref",[]),ty1),TyEmp) as tm ->
+        if level < 0 then
+          tm
+        else (
           changed := true;
-          TmTpp((term_shift (x + o) tm'),ty2)
-*)
+          TmTpp(TmTpp(TmCon(Const.CnSym "ref",[]),ty1),fresh_mvar (rank-1))
+        )
+    | TmTpp(TmTpp(TmCon(Const.CnSym "ref",[]),ty1),ty2)
+        when not (has_tyvar ty1) ->
+        unify lrefs ty1 ty2;
+        changed := true;
+        TmCon(Const.CnSym "ref",[])
     | TmTpp(TmTpp(TmCon(Const.CnSel l,[]),ty1),ty2) as tm ->
         let ty2 = repr ty2 in
           ( match ty2 with
@@ -285,6 +297,7 @@ let type_eval lrefs ctx tm =
                     changed := true;
                     TmCon(Const.CnSel l,[])
               | TyMva{contents=NoLink _} -> tm
+              | TyVar _ -> tm
               | _ -> raise (Label_fail(l,!lrefs)) )
     | TmTpp(TmTpp(TmCon(Const.CnNth i,[]),ty1),ty2) as tm ->
         let ty2 = repr ty2 in
@@ -295,10 +308,11 @@ let type_eval lrefs ctx tm =
                     changed := true;
                     TmCon(Const.CnNth i,[])
               | TyMva{contents=NoLink _} -> tm
+              | TyVar _ -> tm
               | _ -> raise (Tuple_fail(i,!lrefs)) )
     | TmTpp(tm1,ty2) ->
-        TmTpp(walk ctx tm1,ty2)
-    | TmOvr(ty1,os) ->
+        TmTpp(walk ctx level rank tm1,ty2)
+    | TmOvr(ty1,os) when not (has_tyvar ty1) ->
         let os' = List.filter (
           fun (topt,tm) -> match topt with
             | None -> assert false
@@ -314,11 +328,12 @@ let type_eval lrefs ctx tm =
             | [Some ty,tm] -> changed := true; unify lrefs ty ty1; tm
             | [None,tm] -> assert false
             | _ -> TmOvr(ty1,os') )
+    | TmOvr(ty1,os) as tm -> tm
     | _ -> assert false
   in
   let rec loop tm =
     Printf.printf "...> %s\n" (Absyn.to_string ctx tm);
-    if !changed then ( changed := false; loop (walk ctx tm) ) else tm
+    if !changed then ( changed := false; loop (walk ctx 0 0 tm) ) else tm
   in
     loop tm
 
@@ -336,8 +351,8 @@ let typeof lrefs ctx tm =
         instanciate rank tm (Context.get_typ ctx x)
     | TmMem _ -> assert false (* プログラムテキスト中には出現しない *)
     | TmCon(Const.CnSym("ref") as c,_) as tm ->
-        instanciate no_rank tm (Type.of_const c)
-(*        instanciate (rank-1) tm (Type.of_const c) *)
+        let tm,ty = instanciate rank tm (Type.of_const c) in
+          TmTpp(tm,Type.TyEmp),ty
     | TmCon(c,[]) as tm ->
         instanciate rank tm (Type.of_const c)
     | TmAbs((b,_),tm) ->
@@ -354,7 +369,6 @@ let typeof lrefs ctx tm =
           TmApp(tm1,tm2),ty
     | TmLet((b,_),tm1,tm2) ->
         let tm1',ty1 = walk ctx (rank + 1) tm1 in
-        let _ = type_eval lrefs ctx tm1' in
         let tm1',ty1' = generalize ctx (rank + 1) tm1' b ty1 in
         let ctx' = Context.add_typebind ctx b ty1' in
         let tm2',ty2 = walk ctx' rank tm2 in
