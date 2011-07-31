@@ -12,10 +12,34 @@ def evil = \f.
 
 def evil_id = evil (\x.x);
 
-
+def evil_id' = (\f.
+  let r = ref {} in \x.
+    let y = !r in let _ = := r {f x} in
+      if (is_nil y) (hd (!r)) (hd y)) (\x.x)
 
 ---> r‚ªƒNƒ[ƒWƒƒ‚É•Â‚¶ž‚ß‚ç‚ê‚é
+  => “¯‚¶‚É‚È‚é‚Í‚¸
+def r0 = !(ref {});
+def r1 = ref {}; 
+def r2 = let r = ref {} in r;
+def r3 = let r = ref {} in !r;
+
  
+(\<t0>.(\<t1>.(\<t2>.
+(\f':(t0(2) -> t1(1)).
+  (let r:(<t0'> => (Ref (List t0'(0))))
+   = (\<t0'>.(((ref <(List t0'(0))>) <*>) (nil <t0'(0)>)))
+  in (\x:t0(4).
+    (let y:(<t0'> => (List t0'(0))) =
+       (\<t0'>.((! <(List t0'(0))>) (r(2) <t0'(0)>)))
+    in
+    (let _ :(List t1(5)) = (((:= <(List t1(5))>) (r(2) <t1(5)>)) (((cons <t1(5)>) (f'(3) x(1))) (nil <t1(5)>)))
+     in ((((if(12) <t2(5)>) ((is_nil(10) <X57(rank:0)>) (y(1) <X57(rank:0)>))) ((hd(11) <t2(5)>) ((! <(List t2(5))>) (r(3) <t2(5)>)))) ((hd(11) <t2(5)>) (y(1) <t2(5)>))))
+)
+)
+)
+)
+)))
 
 
 "Syntactic approach to type soundness"

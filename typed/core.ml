@@ -116,7 +116,7 @@ let rec eval_step ctx store = function
 (** 項が値になるまで評価を行う *)
 let eval ctx store tm =
   let rec iter tm =
-    Printf.printf "---> %s\n" (Absyn.to_string ctx tm);
+(*    Printf.printf "---> %s\n" (Absyn.to_string ctx tm); *)
     if is_value tm then
       tm
     else
@@ -265,7 +265,8 @@ let type_eval lrefs ctx tm =
                     | CsDef tm     -> CsDef(walk ctx level rank tm)
                 ) cs)
     | TmLet((b,Some ty),tm1,tm2) ->
-        let tm1' = walk ctx level (rank + 1) tm1 in
+(*        let tm1' = walk ctx level (rank + 1) tm1 in *)
+        let tm1' = walk ctx 0 (rank + 1) tm1 in
         let ctx' = Context.add_termbind ctx b tm1' 1 in
           if !changed then
             TmLet((b,Some ty),tm1',tm2)
@@ -353,6 +354,11 @@ let typeof lrefs ctx tm =
     | TmCon(Const.CnSym("ref") as c,_) as tm ->
         let tm,ty = instanciate rank tm (Type.of_const c) in
           TmTpp(tm,Type.TyEmp),ty
+(*
+    | TmCon(Const.CnSym("!") as c,_) as tm ->
+        Printf.printf "! rank  = %d\n" rank;
+        instanciate (rank-1) tm (Type.of_const c)
+*)
     | TmCon(c,[]) as tm ->
         instanciate rank tm (Type.of_const c)
     | TmAbs((b,_),tm) ->
