@@ -24,6 +24,7 @@ def r1 = ref {};
 def r2 = let r = ref {} in r;
 def r3 = let r = ref {} in !r;
 
+let‚Ì’†‚År‚ª•Ô‚è’l‚É‚È‚Á‚Ä‚¢‚½‚çA‚»‚ê‚ÍA-1
  
 (\<t0>.(\<t1>.(\<t2>.
 (\f':(t0(2) -> t1(1)).
