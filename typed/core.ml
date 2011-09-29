@@ -445,7 +445,7 @@ let typing ctx tm b =
   let lrefs = ref [] in
   let rank = 0 in
   let tm,ty = typeof lrefs ctx tm in
-  let _ = type_eval lrefs ctx tm in
+  let tm = type_eval lrefs ctx tm in
   let tm,ty = generalize ctx rank tm b ty in
     print_string (Absyn.to_string ctx tm); print_newline();
     tm,ty

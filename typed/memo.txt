@@ -145,10 +145,14 @@ over ƒÑ of ƒÑ1=>M1|...|ƒÑn=>Mn
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 let print =
-  fix \print.\x.(over t -> unit of
-                 | print_string
-                 | print_int
-                 | ) x
+  fix \print_.\x.
+    (over t -> unit of
+        | print_int
+        | print_float
+        | print_string
+        | \xs.case xs of
+                nil   -> print_string "[]"
+              | x::xs -> print_ x; print_ xs)
 
 Œ^ƒGƒ‰[‚É‚È‚é‚Í‚¸
 > #l {l = #l} (#l {l = 0})
@@ -290,3 +294,30 @@ def evenodd =
 
 fix (\f,g.E) -> (\f.E) (fix \f.E)
 fst v
+
+
+‹»–¡[‚¢—áF
+(\x.over a of x | 1.0)
+(\x.over a of x | 1.0) 0
+
+iadd_ ((\x.over a of x 3 | 1.0) (\x.x))
+(\x.over a of x | 1.0) (\x.x) 3
+
+(over a of #l | 1.0) {l = 3}
+(over a of (\x.x) #l | 1.0) {l = 3}
+(over a of (\x.#l x) | 1.0) {l = 3}
+
+(\x.x) (over a of (\x.x) #l (#m {m = {l = #l}}) | 1.0) {l = 3}
+
+(\x.x) #l (over a of (\x.x) #l (#m {m={l={l=3}}}) | 1.0)
+
+#l (over a of (\x.x) #l (#m {m={l={l=3}}}) | 1.0)
+   ---> error!‚É‚È‚é
+
+#l (over a of {l = 3} | 1);
+   ---> error!‚É‚È‚é
+
+(\y.over a of (\x.x) #l (#m {m = {l = y}}) | 1.0)
+(\y.over a of (\x.x) #l (#m {m = {l = y}}) | 1.0) 3
+
+
